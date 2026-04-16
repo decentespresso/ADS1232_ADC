@@ -34,6 +34,7 @@
      - Serial monitor at 115200 baud
 */
 
+#include <Arduino.h>
 #include <ADS1232_ADC.h>
 
 // -- Pin configuration (adjust to your board) --
