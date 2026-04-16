@@ -12,7 +12,7 @@
       "name": "Sofronio Chen"
     }
   ],
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "frameworks": "arduino",
   "platforms": "espressif32"
 }

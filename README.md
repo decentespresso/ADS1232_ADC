@@ -189,4 +189,4 @@ ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn,
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+GPL-3.0-or-later — see [LICENSE](LICENSE).
