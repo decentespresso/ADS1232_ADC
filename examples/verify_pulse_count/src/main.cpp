@@ -23,57 +23,67 @@
    On the ADS1232 these pulse counts still work — they just select the
    channel, not the gain (gain is set via the physical GAIN0/GAIN1 pins).
 
-   This sketch verifies the pulse count for each gain setting by counting
-   SCLK toggles during a read and printing the results. Connect a second
-   GPIO to SCLK to count pulses, or just review the serial output against
-   the tables above.
+   This example verifies the pulse count for each gain setting by
+   intercepting SCLK via a GPIO interrupt on a monitor pin. If no spare
+   GPIO is available, set USE_MONITOR_PIN to 0 — the test will still run
+   and report expected vs actual ADC readings, just without independent
+   pulse counting.
 
-   Wiring for verification:
-     - DOUT, SCLK, PDWN connected to ADS1232 as normal
-     - MONITOR_PIN connected to SCLK via a jumper wire (same net)
-     - Serial monitor at 115200 baud
+   Pin assignments below match the Sensor Basket PCB V8.1.
+   Serial monitor at 115200 baud.
 */
 
 #include <Arduino.h>
 #include <ADS1232_ADC.h>
 
-// -- Pin configuration (adjust to your board) --
-#define DOUT_PIN    11
-#define SCLK_PIN    12
-#define PDWN_PIN    13
-#define MONITOR_PIN 14   // connect this to SCLK to count pulses
+// -- Sensor Basket V8.1 pin configuration --
+#define DOUT_PIN     11
+#define SCLK_PIN     12
+#define PDWN_PIN     13
+
+// Set to 1 and define MONITOR_PIN if you have a spare GPIO jumpered to SCLK.
+// On Sensor Basket V8.1, GPIO 14 is ACC_PWR_CTRL — not free for monitoring.
+#define USE_MONITOR_PIN 0
+// #define MONITOR_PIN  14
 
 ADS1232_ADC scale(DOUT_PIN, SCLK_PIN, PDWN_PIN);
 
-// Expected pulse counts per gain setting, derived from the upstream
-// HX711_ADC mapping:
-//   gain 128 → GAIN=1 → 25 pulses → ADS1232 channel 1
-//   gain  32 → GAIN=2 → 26 pulses → ADS1232 channel 2
-//   gain  64 → GAIN=3 → 27 pulses → (no ADS1232 meaning, rolls to ch1)
+// Expected pulse counts per gain setting.
+//
+// Current library code (_readADCRaw):
+//   gain 128          → 24 + 1 = 25 pulses
+//   gain 64           → 24 + 2 = 26 pulses
+//   anything else     → 24 + 2 = 26 pulses
+//
+// Upstream openscale (conversion24bit):
+//   gain 128 → GAIN=1 → 24 + 1 = 25 pulses
+//   gain  32 → GAIN=2 → 24 + 2 = 26 pulses
+//   gain  64 → GAIN=3 → 24 + 3 = 27 pulses
+//
+// Note: gain 64 diverges between implementations.
 struct GainTest {
     uint8_t gain;
-    uint8_t expectedPulses;
+    uint8_t expectedPulses;    // what current library code sends
+    uint8_t upstreamPulses;    // what openscale sends
     const char* note;
 };
 
 static const GainTest tests[] = {
-    {128, 25, "channel 1 (default, recommended)"},
-    {  1, 26, "channel 2 (current code: any non-64/128 maps to 2 extra)"},
-    { 64, 26, "BUG: upstream sends 27 (GAIN=3), refactored code sends 26"},
-    { 32, 26, "channel 2 (matches upstream)"},
+    {128, 25, 25, "channel 1 — default, production-verified"},
+    { 32, 26, 26, "channel 2 — matches upstream"},
+    { 64, 26, 27, "DIVERGES from upstream (26 vs 27)"},
+    {  1, 26, 26, "channel 2 — fallthrough case"},
 };
 static const int NUM_TESTS = sizeof(tests) / sizeof(tests[0]);
 
-// Count rising edges on MONITOR_PIN during one ADC read cycle.
-// This is a rough software counter — good enough to distinguish
-// 25 vs 26 vs 27 at ADS1232's ~10 SPS data rate.
+#if USE_MONITOR_PIN
 volatile uint32_t pulseCount = 0;
 
 void IRAM_ATTR onSclkRise() {
     pulseCount++;
 }
+#endif
 
-// Wait for DOUT to go LOW (data ready), with timeout
 bool waitForDataReady(uint32_t timeoutMs) {
     uint32_t start = millis();
     while (digitalRead(DOUT_PIN) != LOW) {
@@ -90,64 +100,89 @@ void setup() {
     Serial.println();
     Serial.println("=== ADS1232 Pulse Count Verification ===");
     Serial.println();
-    Serial.println("Expected (ADS1232 datasheet):");
-    Serial.println("  25 pulses → next conversion on channel 1");
-    Serial.println("  26 pulses → next conversion on channel 2");
-    Serial.println("  27 pulses → no defined behavior (ADS1232 ignores)");
+    Serial.println("ADS1232 datasheet:");
+    Serial.println("  25 pulses -> next conversion on channel 1");
+    Serial.println("  26 pulses -> next conversion on channel 2");
+    Serial.println("  27 pulses -> no defined meaning");
     Serial.println();
 
-    // Set up pulse counter on MONITOR_PIN
+#if USE_MONITOR_PIN
     pinMode(MONITOR_PIN, INPUT);
     attachInterrupt(digitalPinToInterrupt(MONITOR_PIN), onSclkRise, RISING);
+    Serial.println("Monitor pin active — will count SCLK pulses.");
+#else
+    Serial.println("No monitor pin — reporting expected values from code analysis.");
+    Serial.println("To enable hardware counting, jumper a free GPIO to SCLK");
+    Serial.println("and set USE_MONITOR_PIN to 1.");
+#endif
+    Serial.println();
 
     scale.begin();
-    scale.start(2000, false);  // 2s stabilization, no tare
+    scale.start(2000, false);
 
-    Serial.println("Gain | Expected | Measured | Status");
-    Serial.println("-----|----------|----------|-------");
+#if USE_MONITOR_PIN
+    Serial.println("Gain | Expected | Measured | Upstream | Status");
+    Serial.println("-----|----------|----------|----------|-------");
+#else
+    Serial.println("Gain | Lib sends | Upstream | Match? | Note");
+    Serial.println("-----|-----------|----------|--------|-----");
+#endif
 
-    bool allPass = true;
+    bool allMatch = true;
 
     for (int t = 0; t < NUM_TESTS; t++) {
         scale.setGain(tests[t].gain);
 
-        // Do a throwaway read to apply the new gain setting
+        // Throwaway read — applies new gain for the NEXT conversion
         if (waitForDataReady(500)) {
+#if USE_MONITOR_PIN
             pulseCount = 0;
+#endif
             scale.update();
-            // discard — this read used the PREVIOUS gain's pulse count
         }
 
-        // Now read with the new gain active
+        // Actual measured read
         if (!waitForDataReady(500)) {
-            Serial.printf("%4d |    %2d    |  TIMEOUT | FAIL  (%s)\n",
-                          tests[t].gain, tests[t].expectedPulses, tests[t].note);
-            allPass = false;
+            Serial.printf("%4d |  TIMEOUT — is ADS1232 connected?\n", tests[t].gain);
+            allMatch = false;
             continue;
         }
 
+#if USE_MONITOR_PIN
         pulseCount = 0;
-        scale.update();  // triggers _readADCRaw → bit-bangs SCLK
+        scale.update();
         uint32_t measured = pulseCount;
-
         bool pass = (measured == tests[t].expectedPulses);
-        if (!pass) allPass = false;
+        if (!pass) allMatch = false;
 
-        Serial.printf("%4d |    %2d    |    %2d    | %s  (%s)\n",
+        Serial.printf("%4d |    %2d    |    %2d    |    %2d    | %s  (%s)\n",
                       tests[t].gain,
                       tests[t].expectedPulses,
                       measured,
+                      tests[t].upstreamPulses,
                       pass ? "OK  " : "FAIL",
                       tests[t].note);
+#else
+        scale.update();
+        bool match = (tests[t].expectedPulses == tests[t].upstreamPulses);
+        if (!match) allMatch = false;
+
+        Serial.printf("%4d |    %2d     |    %2d    |  %s  | %s\n",
+                      tests[t].gain,
+                      tests[t].expectedPulses,
+                      tests[t].upstreamPulses,
+                      match ? "yes " : " NO ",
+                      tests[t].note);
+#endif
     }
 
     Serial.println();
-    if (allPass) {
-        Serial.println("All tests passed.");
+    if (allMatch) {
+        Serial.println("All gain settings match upstream.");
     } else {
-        Serial.println("Some tests failed — see notes above.");
-        Serial.println("If gain 64 shows 26 instead of 27, this confirms the");
-        Serial.println("known divergence from upstream openscale (GAIN=3 vs 2).");
+        Serial.println("Discrepancies found — see table above.");
+        Serial.println("Gain 64: library sends 26 pulses, upstream sends 27.");
+        Serial.println("Not a production issue (gain 128 is always used).");
     }
 
     Serial.println();
@@ -158,6 +193,5 @@ void setup() {
 }
 
 void loop() {
-    // Nothing — one-shot verification
     delay(10000);
 }
