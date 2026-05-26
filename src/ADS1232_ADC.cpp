@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------------------
 // Constructor
 // ---------------------------------------------------------------------------
-ADS1232_ADC::ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn, uint8_t a0, 
+ADS1232_ADC::ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn, uint8_t a0,
                          int samples, bool ignHigh, bool ignLow)
     : _dout(dout), _sck(sck), _pdwn(pdwn), _a0(a0)
 {
@@ -22,7 +22,7 @@ ADS1232_ADC::ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn, uint8_t a0,
     _gain = 128;
     _samplesInUse = _maxSamples;
     _validSamples = 0;
-    
+
     // Initialize the buffer with zeros
     for (int i = 0; i < ADS1232_BUFFER_SIZE; i++) {
         _dataBuffer[i] = 0;
@@ -40,11 +40,11 @@ void ADS1232_ADC::begin() {
     pinMode(_dout, INPUT);
     pinMode(_sck, OUTPUT);
     pinMode(_pdwn, OUTPUT);
-    
+
     if (_a0 != 255) {
         pinMode(_a0, OUTPUT);
     }
-    
+
     powerUp();
     setGain(128);
 }
@@ -53,11 +53,11 @@ void ADS1232_ADC::begin(uint8_t gain) {
     pinMode(_dout, INPUT);
     pinMode(_sck, OUTPUT);
     pinMode(_pdwn, OUTPUT);
-    
+
     if (_a0 != 255) {
         pinMode(_a0, OUTPUT);
     }
-    
+
     powerUp();
     setGain(gain);
 }
@@ -73,11 +73,12 @@ void ADS1232_ADC::beginTask(uint32_t intervalMs) {
 
     _taskIntervalMs = intervalMs;  // Store the interval for the task to use
     _taskRunning = true;
+    _lastDoutLowMillis = millis();  // Reset timeout on start
 
     // Create the FreeRTOS task
     xTaskCreatePinnedToCore(
-        [](void* pvParameters) { 
-            static_cast<ADS1232_ADC*>(pvParameters)->_samplingTask(NULL); 
+        [](void* pvParameters) {
+            static_cast<ADS1232_ADC*>(pvParameters)->_samplingTask(NULL);
         },
         "ADS1232_Task",
         4096,               // Stack size
@@ -118,13 +119,13 @@ void ADS1232_ADC::start(unsigned long t) {
 void ADS1232_ADC::start(unsigned long t, bool dotare) {
     unsigned long settleTime = t + 400; // Minimum 400ms settling time at 10SPS
     unsigned long startTime = millis();
-    
+
     // Wait for stabilization period
     while (millis() - startTime < settleTime) {
         update();
         yield();
     }
-    
+
     if (dotare) {
         tare();
     }
@@ -144,6 +145,13 @@ void ADS1232_ADC::_samplingTask(void* pvParameters) {
         // Check if DOUT is LOW (data ready)
         if (digitalRead(_dout) == LOW) {
             _readADCRaw();
+            _lastDoutLowMillis = millis();
+            _signalTimeoutFlag = false;
+        } else {
+            // Signal timeout check — ADC hasn't produced a result
+            if (millis() - _lastDoutLowMillis > _signalTimeoutMs) {
+                _signalTimeoutFlag = true;
+            }
         }
     }
 
@@ -154,9 +162,10 @@ void ADS1232_ADC::_samplingTask(void* pvParameters) {
 }
 
 // ---------------------------------------------------------------------------
-// Internal: _readADCRaw() - Bit-banging ADC read (renamed from conversion24bit)
+// Internal: _readADCRaw() - Bit-banging ADC read
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::_readADCRaw() {
+    unsigned long startMicros = micros();
     unsigned long data = 0;
     uint8_t dout;
 
@@ -165,12 +174,14 @@ void ADS1232_ADC::_readADCRaw() {
         digitalWrite(_sck, HIGH);
         delayMicroseconds(1);
         digitalWrite(_sck, LOW);
-        
+
         if (i < 24) {
             dout = digitalRead(_dout);
             data = (data << 1) | dout;
         }
     }
+
+    _conversionTimeMicros = micros() - startMicros;
 
     // Flip the 24th bit to correct signed magnitude
     data = data ^ 0x800000;
@@ -180,17 +191,36 @@ void ADS1232_ADC::_readADCRaw() {
 }
 
 // ---------------------------------------------------------------------------
-// Internal: _updateBuffer() - Updates ring buffer and running sum
+// Internal: _updateBuffer() - Updates ring buffer, fires debug callback
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::_updateBuffer(long newValue) {
+    bool shouldFireCallback = false;
+
     if (_mutex != NULL) {
         if (xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+            // Apply reverse if enabled
+            if (_reverseVal) {
+                newValue = 0xFFFFFF - newValue;
+            }
+
             _dataBuffer[_bufferIdx] = newValue;
             _bufferIdx = (_bufferIdx + 1) % _samplesInUse;
             if (_validSamples < _samplesInUse) _validSamples++;
-            
+            _lastRawValue = newValue;
+
+            // Capture debug snapshot under mutex, fire callback after release
+            if (_debugEnabled && _debugCallback != nullptr) {
+                shouldFireCallback = true;
+            }
+
             xSemaphoreGive(_mutex);
         }
+    }
+
+    // Fire callback outside mutex — callback may call getData() safely
+    if (shouldFireCallback) {
+        ADS1232DebugInfo info = getDebugInfo();
+        _debugCallback(info);
     }
 }
 
@@ -241,9 +271,10 @@ float ADS1232_ADC::getData() {
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::tare() {
     tareNoDelay();
-    
+
     // Wait for tare to complete (non-blocking wait)
-    uint32_t timeout = millis() + 2000; // 2 second timeout
+    // tareNoDelay is instant — captures current buffer average.
+    uint32_t timeout = millis() + 2000; // 2 second timeout guard
     while (!getTareStatus()) {
         if (millis() > timeout) break;
         delay(10);
@@ -259,7 +290,7 @@ void ADS1232_ADC::tareNoDelay() {
     if (xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
         long sum = 0;
         int count = _validSamples;
-        
+
         for (int i = 0; i < count; i++) {
             sum += _dataBuffer[i];
         }
@@ -333,6 +364,10 @@ int ADS1232_ADC::getChannelInUse() {
     return digitalRead(_a0) == HIGH ? 1 : 0;
 }
 
+uint8_t ADS1232_ADC::getDoutPin() {
+    return _dout;
+}
+
 // ---------------------------------------------------------------------------
 // Sampling Control
 // ---------------------------------------------------------------------------
@@ -349,6 +384,10 @@ void ADS1232_ADC::setSamplesInUse(int samples) {
             xSemaphoreGive(_mutex);
         }
     }
+}
+
+int ADS1232_ADC::getSamplesInUse() {
+    return _samplesInUse;
 }
 
 uint8_t ADS1232_ADC::update() {
@@ -369,7 +408,7 @@ bool ADS1232_ADC::refreshDataSet() {
     int targetCount = _samplesInUse + (_ignHigh ? 1 : 0) + (_ignLow ? 1 : 0);
     int currentCount = 0;
     unsigned long timeout = millis() + 5000; // 5s timeout (~50 samples at 10SPS)
-    
+
     while (currentCount < targetCount) {
         if (millis() > timeout) return false;
         if (digitalRead(_dout) == LOW) {
@@ -384,9 +423,125 @@ bool ADS1232_ADC::refreshDataSet() {
 float ADS1232_ADC::getNewCalibration(float known_mass) {
     float currentValue = getData();
     if (known_mass == 0) return _calFactor;
-    
+
     float newCalFactor = (currentValue * _calFactor) / known_mass;
     setCalFactor(newCalFactor);
     return newCalFactor;
 }
 
+// ---------------------------------------------------------------------------
+// Debug & Diagnostics
+// ---------------------------------------------------------------------------
+
+void ADS1232_ADC::setDebugCallback(DebugCallback callback) {
+    _debugCallback = callback;
+}
+
+void ADS1232_ADC::setDebugEnabled(bool enabled) {
+    _debugEnabled = enabled;
+}
+
+bool ADS1232_ADC::getDebugEnabled() {
+    return _debugEnabled;
+}
+
+ADS1232DebugInfo ADS1232_ADC::getDebugInfo() {
+    ADS1232DebugInfo info;
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        info = _captureDebugInfoLocked();
+        xSemaphoreGive(_mutex);
+    }
+
+    return info;
+}
+
+ADS1232DebugInfo ADS1232_ADC::_captureDebugInfoLocked() {
+    ADS1232DebugInfo info;
+
+    info.timestamp = millis();
+    info.rawValue = _lastRawValue;
+    info.tareOffset = (long)_tareOffset;
+    info.conversionTimeMs = _conversionTimeMicros / 1000.0f;
+    info.sps = (_conversionTimeMicros > 0) ? (1000000.0f / _conversionTimeMicros) : 0.0f;
+    info.readIndex = _bufferIdx;
+    info.samplesInUse = _samplesInUse;
+    info.validSamples = _validSamples;
+    info.signalTimeout = _signalTimeoutFlag;
+
+    // Smoothed value and data-out-of-range (same logic as getData)
+    if (_validSamples > 0) {
+        long sum = 0;
+        long high = LONG_MIN;
+        long low = LONG_MAX;
+        int count = 0;
+
+        for (int i = 0; i < _validSamples; i++) {
+            long val = _dataBuffer[i];
+            sum += val;
+            if (val > high) high = val;
+            if (val < low) low = val;
+            count++;
+        }
+
+        if (_ignHigh && count > 2) sum -= high;
+        if (_ignLow && count > 2) sum -= low;
+
+        int effectiveCount = count;
+        if (_ignHigh && count > 2) effectiveCount--;
+        if (_ignLow && count > 2) effectiveCount--;
+
+        if (effectiveCount > 0) {
+            info.smoothedValue = sum / effectiveCount;
+        }
+    }
+
+    info.dataOutOfRange = (_lastRawValue > 0xFFFFFF);
+
+    return info;
+}
+
+void ADS1232_ADC::setSignalTimeoutMs(uint32_t ms) {
+    _signalTimeoutMs = ms;
+}
+
+bool ADS1232_ADC::getSignalTimeoutFlag() {
+    return _signalTimeoutFlag;
+}
+
+// ---------------------------------------------------------------------------
+// Conversion Timing Diagnostics
+// ---------------------------------------------------------------------------
+
+float ADS1232_ADC::getConversionTime() {
+    return _conversionTimeMicros / 1000.0f;
+}
+
+float ADS1232_ADC::getSPS() {
+    if (_conversionTimeMicros == 0) return 0.0f;
+    return 1000000.0f / _conversionTimeMicros;
+}
+
+float ADS1232_ADC::getSettlingTime() {
+    return getConversionTime() * _samplesInUse;
+}
+
+// ---------------------------------------------------------------------------
+// Raw Offset Access
+// ---------------------------------------------------------------------------
+
+long ADS1232_ADC::getTareOffset() {
+    return (long)_tareOffset;
+}
+
+void ADS1232_ADC::setTareOffset(long newoffset) {
+    _tareOffset = (float)newoffset;
+}
+
+// ---------------------------------------------------------------------------
+// Output Control
+// ---------------------------------------------------------------------------
+
+void ADS1232_ADC::setReverseOutput() {
+    _reverseVal = true;
+}

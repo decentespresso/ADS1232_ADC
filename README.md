@@ -10,6 +10,10 @@ Features:
 - Multi-instance support (multiple load cells on one ESP32)
 - Calibration and tare helpers
 - Power-down / power-up control
+- Debug callback with structured snapshot info
+- Signal timeout detection for ADC fault monitoring
+- Conversion timing diagnostics (SPS, settling time)
+- Reverse output for flexible load-cell wiring
 
 Based on [HX711_ADC](https://github.com/olkal/HX711_ADC) by Olav Kallhovd. Original ADS1232 port by Sofronio Chen.
 
@@ -186,6 +190,23 @@ ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn,
 | `setGain(uint8_t gain)` | Set gain (affects clock pulse count) |
 | `setChannelInUse(int channel)` | Select ADC channel (0 or 1) |
 | `getChannelInUse()` | Get current channel |
+| `setReverseOutput()` | Flip output sign (for inverted load-cell wiring) |
+
+### Debug & Diagnostics
+
+| Method | Description |
+|--------|-------------|
+| `setDebugCallback(cb)` | Fire callback on each ADC conversion from the FreeRTOS task |
+| `getDebugInfo()` | Snapshot of current internal state |
+| `setSignalTimeoutMs(uint32_t)` | Override DOUT timeout (default 100ms) |
+| `getSignalTimeoutFlag()` | True if DOUT inactive longer than timeout |
+| `getConversionTime()` | Latest bit-bang conversion time in ms |
+| `getSPS()` | Samples per second from latest conversion |
+| `getSettlingTime()` | Estimated settling time = conversionTime × samplesInUse |
+| `getTareOffset()` | Get raw tare offset (for calibration tools) |
+| `setTareOffset(long)` | Set raw tare offset directly |
+
+**Debug callback notes:** Fires from the FreeRTOS sampling task, once per conversion. Must complete in < 1ms, no blocking ops, no mutex acquisition. Receives a snapshot copy — calling `getData()` from the callback is safe. See `ADS1232DebugInfo` struct in the header for available fields.
 
 ## License
 
