@@ -299,6 +299,7 @@ void ADS1232_ADC::tareNoDelay() {
             _tareOffset = (float)sum / count;
         }
 
+        _tareComplete = true;
         xSemaphoreGive(_mutex);
     }
 }
@@ -307,8 +308,11 @@ void ADS1232_ADC::tareNoDelay() {
 // getTareStatus() - Returns true if tare operation is complete
 // ---------------------------------------------------------------------------
 bool ADS1232_ADC::getTareStatus() {
-    // Non-blocking tare is instant in this implementation
-    return true;
+    // One-shot: return true once after tare completes, then false.
+    // Matches openscale's expectation — prevents re-entering tare-reset.
+    bool t = _tareComplete;
+    _tareComplete = false;
+    return t;
 }
 
 // ---------------------------------------------------------------------------

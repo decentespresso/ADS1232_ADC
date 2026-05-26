@@ -116,6 +116,7 @@ private:
     float _calFactor = 1.0;
     float _calFactorRecip = 1.0;
     float _tareOffset = 0;
+    volatile bool _tareComplete = false;            // One-shot flag: true after tare, cleared on read
     long _dataBuffer[ADS1232_BUFFER_SIZE];
     int _bufferIdx = 0;
     int _samplesInUse = 0;
