@@ -126,7 +126,8 @@ private:
     DebugCallback _debugCallback = nullptr;
     bool _debugEnabled = false;
     volatile long _lastRawValue = 0;
-    volatile unsigned long _conversionTimeMicros = 0;
+    volatile unsigned long _conversionTimeMicros = 0;  // interval between successive conversions (true sample period)
+    volatile unsigned long _lastConvMicros = 0;        // micros() of previous conversion; 0 = no prior sample
     volatile unsigned long _lastDoutLowMillis = 0;
     volatile bool _signalTimeoutFlag = false;
     uint32_t _signalTimeoutMs = DEFAULT_SIGNAL_TIMEOUT_MS;

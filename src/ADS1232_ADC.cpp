@@ -165,7 +165,16 @@ void ADS1232_ADC::_samplingTask(void* pvParameters) {
 // Internal: _readADCRaw() - Bit-banging ADC read
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::_readADCRaw() {
-    unsigned long startMicros = micros();
+    // Measure the interval since the previous conversion — this is the true
+    // sample period (DOUT-ready to DOUT-ready), which getSPS()/getConversionTime()
+    // report. Timing the read loop itself would only yield the bit-bang duration
+    // (~90us → a meaningless ~11kHz), not the ADS1232's actual data rate.
+    unsigned long now = micros();
+    if (_lastConvMicros != 0) {
+        _conversionTimeMicros = now - _lastConvMicros;
+    }
+    _lastConvMicros = now;
+
     unsigned long data = 0;
     uint8_t dout;
 
@@ -180,8 +189,6 @@ void ADS1232_ADC::_readADCRaw() {
             data = (data << 1) | dout;
         }
     }
-
-    _conversionTimeMicros = micros() - startMicros;
 
     // Flip the 24th bit to correct signed magnitude
     data = data ^ 0x800000;
@@ -354,6 +361,7 @@ void ADS1232_ADC::powerUp() {
     digitalWrite(_pdwn, HIGH);
     delayMicroseconds(1);
     digitalWrite(_sck, LOW);
+    _lastConvMicros = 0;  // discard the power-down gap from the next SPS interval
 }
 
 // ---------------------------------------------------------------------------
