@@ -135,6 +135,7 @@ private:
     bool _reverseVal = false;
 
     // Internal processing
+    bool _ensureMutex();
     void _samplingTask(void* pvParameters);         // The FreeRTOS task function
     bool _readADCRaw();                             // The bit-banging ADC reader
     void _updateBuffer(long newValue);              // Updates the running sum and buffer

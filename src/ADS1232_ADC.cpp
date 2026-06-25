@@ -34,10 +34,19 @@ ADS1232_ADC::ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn, uint8_t a0,
     _ioMutex = xSemaphoreCreateMutex();
 }
 
+bool ADS1232_ADC::_ensureMutex() {
+    if (_mutex != NULL) return true;
+
+    _mutex = xSemaphoreCreateMutex();
+    return _mutex != NULL;
+}
+
 // ---------------------------------------------------------------------------
 // Lifecycle: begin()
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::begin() {
+    if (!_ensureMutex()) return;
+
     pinMode(_dout, INPUT);
     pinMode(_sck, OUTPUT);
     pinMode(_pdwn, OUTPUT);
@@ -51,6 +60,8 @@ void ADS1232_ADC::begin() {
 }
 
 void ADS1232_ADC::begin(uint8_t gain) {
+    if (!_ensureMutex()) return;
+
     pinMode(_dout, INPUT);
     pinMode(_sck, OUTPUT);
     pinMode(_pdwn, OUTPUT);
@@ -67,6 +78,8 @@ void ADS1232_ADC::begin(uint8_t gain) {
 // Lifecycle: beginTask() - Starts the background FreeRTOS sampling task
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::beginTask(uint32_t intervalMs) {
+    if (!_ensureMutex()) return;
+
     if (_taskHandle != NULL) {
         // Task already running
         return;
