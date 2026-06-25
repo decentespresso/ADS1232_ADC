@@ -463,7 +463,7 @@ bool ADS1232_ADC::getDebugEnabled() {
 }
 
 ADS1232DebugInfo ADS1232_ADC::getDebugInfo() {
-    ADS1232DebugInfo info;
+    ADS1232DebugInfo info = {};
 
     if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
         info = _captureDebugInfoLocked();
@@ -474,7 +474,7 @@ ADS1232DebugInfo ADS1232_ADC::getDebugInfo() {
 }
 
 ADS1232DebugInfo ADS1232_ADC::_captureDebugInfoLocked() {
-    ADS1232DebugInfo info;
+    ADS1232DebugInfo info = {};
 
     info.timestamp = millis();
     info.rawValue = _lastRawValue;

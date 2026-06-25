@@ -59,6 +59,12 @@ class NumericSafetyTests(unittest.TestCase):
             new_cal_body,
         )
 
+    def test_debug_snapshots_are_zero_initialized(self):
+        source = SOURCE.read_text(encoding="utf-8")
+
+        self.assertNotIn("ADS1232DebugInfo info;", source)
+        self.assertEqual(2, source.count("ADS1232DebugInfo info = {};"))
+
 
 if __name__ == "__main__":
     unittest.main()
