@@ -358,10 +358,17 @@ void ADS1232_ADC::powerDown() {
 }
 
 void ADS1232_ADC::powerUp() {
-    digitalWrite(_pdwn, HIGH);
-    delayMicroseconds(1);
     digitalWrite(_sck, LOW);
+    digitalWrite(_pdwn, LOW);
+    delayMicroseconds(10);
+    digitalWrite(_pdwn, HIGH);
+    delayMicroseconds(26);
+    digitalWrite(_pdwn, LOW);
+    delayMicroseconds(26);
+    digitalWrite(_pdwn, HIGH);
     _lastConvMicros = 0;  // discard the power-down gap from the next SPS interval
+    _lastDoutLowMillis = millis();
+    _signalTimeoutFlag = false;
 }
 
 // ---------------------------------------------------------------------------
