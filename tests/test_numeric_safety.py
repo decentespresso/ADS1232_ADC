@@ -41,6 +41,14 @@ class NumericSafetyTests(unittest.TestCase):
             body,
         )
 
+    def test_sample_accumulators_are_wide_enough_for_full_buffer(self):
+        self.assertGreater(0xFFFFFF * 256, 2_147_483_647)
+
+        source = SOURCE.read_text(encoding="utf-8")
+
+        self.assertNotIn("long sum = 0;", source)
+        self.assertEqual(3, source.count("int64_t sum = 0;"))
+
 
 if __name__ == "__main__":
     unittest.main()

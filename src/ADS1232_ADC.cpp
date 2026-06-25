@@ -238,7 +238,7 @@ float ADS1232_ADC::getData() {
     if (_mutex == NULL) return 0.0f;
 
     float result = 0.0f;
-    long sum = 0;
+    int64_t sum = 0;
     long high = LONG_MIN;
     long low = LONG_MAX;
     int count = 0;
@@ -295,7 +295,7 @@ void ADS1232_ADC::tareNoDelay() {
     if (_mutex == NULL) return;
 
     if (xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
-        long sum = 0;
+        int64_t sum = 0;
         int count = _validSamples;
 
         for (int i = 0; i < count; i++) {
@@ -483,7 +483,7 @@ ADS1232DebugInfo ADS1232_ADC::_captureDebugInfoLocked() {
 
     // Smoothed value and data-out-of-range (same logic as getData)
     if (_validSamples > 0) {
-        long sum = 0;
+        int64_t sum = 0;
         long high = LONG_MIN;
         long low = LONG_MAX;
         int count = 0;
