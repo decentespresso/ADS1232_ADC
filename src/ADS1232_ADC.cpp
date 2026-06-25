@@ -482,9 +482,10 @@ bool ADS1232_ADC::refreshDataSet() {
 
 float ADS1232_ADC::getNewCalibration(float known_mass) {
     float currentValue = getData();
-    if (known_mass == 0) return _calFactor;
+    float calFactor = getCalFactor();
+    if (known_mass == 0) return calFactor;
 
-    float newCalFactor = (currentValue * _calFactor) / known_mass;
+    float newCalFactor = (currentValue * calFactor) / known_mass;
     setCalFactor(newCalFactor);
     return newCalFactor;
 }

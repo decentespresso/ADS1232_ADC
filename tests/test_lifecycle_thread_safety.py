@@ -65,6 +65,14 @@ class LifecycleThreadSafetyTests(unittest.TestCase):
             )
             self.assertIn("xSemaphoreGive(_mutex);", body, name)
 
+    def test_new_calibration_uses_synchronized_calibration_factor_read(self):
+        body = normalized(method_body("getNewCalibration"))
+
+        self.assertIn("float calFactor = getCalFactor();", body)
+        self.assertIn("if (known_mass == 0) return calFactor;", body)
+        self.assertIn("float newCalFactor = (currentValue * calFactor) / known_mass;", body)
+        self.assertNotIn("_calFactor", body)
+
     def test_update_buffer_copies_debug_callback_before_invoking(self):
         body = normalized(method_body("_updateBuffer"))
 
