@@ -48,6 +48,11 @@ class ADS1232ProtocolTests(unittest.TestCase):
         self.assertIn("_lastDoutLowMillis = millis();", body)
         self.assertIn("_signalTimeoutFlag = false;", body)
 
+    def test_unused_channel_pin_returns_minus_one(self):
+        body = normalized(method_body("getChannelInUse"))
+
+        self.assertIn("if (_a0 == 255) return -1;", body)
+
 
 if __name__ == "__main__":
     unittest.main()

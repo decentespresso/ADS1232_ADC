@@ -384,6 +384,7 @@ void ADS1232_ADC::setChannelInUse(int channel) {
 }
 
 int ADS1232_ADC::getChannelInUse() {
+    if (_a0 == 255) return -1;
     return digitalRead(_a0) == HIGH ? 1 : 0;
 }
 
