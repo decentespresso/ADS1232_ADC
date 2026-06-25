@@ -178,8 +178,7 @@ void ADS1232_ADC::_readADCRaw() {
     unsigned long data = 0;
     uint8_t dout;
 
-    // Read 24 data bits + send GAIN extra pulses
-    for (uint8_t i = 0; i < (24 + (_gain == 128 ? 1 : (_gain == 64 ? 2 : 2))); i++) {
+    for (uint8_t i = 0; i < 25; i++) {
         digitalWrite(_sck, HIGH);
         delayMicroseconds(1);
         digitalWrite(_sck, LOW);
