@@ -31,6 +31,7 @@ ADS1232_ADC::ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn, uint8_t a0,
 
     // Create the mutex for thread safety
     _mutex = xSemaphoreCreateMutex();
+    _ioMutex = xSemaphoreCreateMutex();
 }
 
 // ---------------------------------------------------------------------------
@@ -107,6 +108,11 @@ void ADS1232_ADC::end() {
         vSemaphoreDelete(_mutex);
         _mutex = NULL;
     }
+
+    if (_ioMutex != NULL) {
+        vSemaphoreDelete(_ioMutex);
+        _ioMutex = NULL;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -165,6 +171,8 @@ void ADS1232_ADC::_samplingTask(void* pvParameters) {
 // Internal: _readADCRaw() - Bit-banging ADC read
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::_readADCRaw() {
+    if (_ioMutex == NULL || xSemaphoreTake(_ioMutex, (TickType_t)10) != pdTRUE) return;
+
     // Measure the interval since the previous conversion — this is the true
     // sample period (DOUT-ready to DOUT-ready), which getSPS()/getConversionTime()
     // report. Timing the read loop itself would only yield the bit-bang duration
@@ -194,6 +202,7 @@ void ADS1232_ADC::_readADCRaw() {
 
     // Update the data buffer with the new value
     _updateBuffer((long)data);
+    xSemaphoreGive(_ioMutex);
 }
 
 // ---------------------------------------------------------------------------
@@ -368,6 +377,8 @@ void ADS1232_ADC::powerUp() {
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::setChannelInUse(int channel) {
     if (_a0 == 255) return;
+    if (_ioMutex == NULL || xSemaphoreTake(_ioMutex, (TickType_t)10) != pdTRUE) return;
+
     digitalWrite(_a0, channel ? HIGH : LOW);
 
     if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
@@ -381,6 +392,7 @@ void ADS1232_ADC::setChannelInUse(int channel) {
 
     _lastDoutLowMillis = millis();
     _signalTimeoutFlag = false;
+    xSemaphoreGive(_ioMutex);
 }
 
 int ADS1232_ADC::getChannelInUse() {

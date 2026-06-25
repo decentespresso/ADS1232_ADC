@@ -4,6 +4,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+HEADER = ROOT / "include" / "ADS1232_ADC.h"
 SOURCE = ROOT / "src" / "ADS1232_ADC.cpp"
 
 
@@ -47,6 +48,17 @@ class ADS1232ProtocolTests(unittest.TestCase):
         self.assertIn("_validSamples = 0;", body)
         self.assertIn("_lastDoutLowMillis = millis();", body)
         self.assertIn("_signalTimeoutFlag = false;", body)
+
+    def test_channel_change_and_adc_read_share_io_lock(self):
+        header = normalized(HEADER.read_text(encoding="utf-8"))
+        read_body = normalized(method_body("_readADCRaw"))
+        channel_body = normalized(method_body("setChannelInUse"))
+
+        self.assertIn("SemaphoreHandle_t _ioMutex = NULL;", header)
+        self.assertLess(read_body.index("xSemaphoreTake(_ioMutex, (TickType_t)10)"), read_body.index("unsigned long now = micros();"))
+        self.assertLess(read_body.index("_updateBuffer((long)data);"), read_body.rindex("xSemaphoreGive(_ioMutex);"))
+        self.assertLess(channel_body.index("xSemaphoreTake(_ioMutex, (TickType_t)10)"), channel_body.index("digitalWrite(_a0, channel ? HIGH : LOW);"))
+        self.assertLess(channel_body.index("_signalTimeoutFlag = false;"), channel_body.rindex("xSemaphoreGive(_ioMutex);"))
 
     def test_unused_channel_pin_returns_minus_one(self):
         body = normalized(method_body("getChannelInUse"))
