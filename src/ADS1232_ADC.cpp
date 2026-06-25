@@ -72,13 +72,14 @@ void ADS1232_ADC::beginTask(uint32_t intervalMs) {
     }
 
     _taskIntervalMs = intervalMs;  // Store the interval for the task to use
-    _taskRunning = true;
     _lastDoutLowMillis = millis();  // Reset timeout on start
 
     // Create the FreeRTOS task
-    xTaskCreatePinnedToCore(
+    BaseType_t taskStatus = xTaskCreatePinnedToCore(
         [](void* pvParameters) {
-            static_cast<ADS1232_ADC*>(pvParameters)->_samplingTask(NULL);
+            ADS1232_ADC* instance = static_cast<ADS1232_ADC*>(pvParameters);
+            instance->_taskRunning = true;
+            instance->_samplingTask(NULL);
         },
         "ADS1232_Task",
         4096,               // Stack size
@@ -87,6 +88,13 @@ void ADS1232_ADC::beginTask(uint32_t intervalMs) {
         &_taskHandle,       // Task handle
         1                   // Core 1 (keep UI on core 0)
     );
+
+    if (taskStatus == pdPASS) {
+        _taskRunning = true;
+    } else {
+        _taskHandle = NULL;
+        _taskRunning = false;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -283,7 +291,10 @@ void ADS1232_ADC::tare() {
     // tareNoDelay is instant — captures current buffer average.
     uint32_t timeout = millis() + 2000; // 2 second timeout guard
     while (!getTareStatus()) {
-        if (millis() > timeout) break;
+        if (millis() > timeout) {
+            _signalTimeoutFlag = true;
+            break;
+        }
         delay(10);
     }
 }
@@ -304,9 +315,9 @@ void ADS1232_ADC::tareNoDelay() {
 
         if (count > 0) {
             _tareOffset = (float)sum / count;
+            _tareComplete = true;
         }
 
-        _tareComplete = true;
         xSemaphoreGive(_mutex);
     }
 }
@@ -358,10 +369,17 @@ void ADS1232_ADC::powerDown() {
 }
 
 void ADS1232_ADC::powerUp() {
-    digitalWrite(_pdwn, HIGH);
-    delayMicroseconds(1);
     digitalWrite(_sck, LOW);
+    digitalWrite(_pdwn, LOW);
+    delayMicroseconds(10);
+    digitalWrite(_pdwn, HIGH);
+    delayMicroseconds(26);
+    digitalWrite(_pdwn, LOW);
+    delayMicroseconds(26);
+    digitalWrite(_pdwn, HIGH);
     _lastConvMicros = 0;  // discard the power-down gap from the next SPS interval
+    _lastDoutLowMillis = millis();
+    _signalTimeoutFlag = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -408,7 +426,12 @@ uint8_t ADS1232_ADC::update() {
 
     if (digitalRead(_dout) == LOW) {
         _readADCRaw();
+        _lastDoutLowMillis = millis();
+        _signalTimeoutFlag = false;
         return 1; // Data was read
+    }
+    if (millis() - _lastDoutLowMillis > _signalTimeoutMs) {
+        _signalTimeoutFlag = true;
     }
     return 0; // No data available
 }
