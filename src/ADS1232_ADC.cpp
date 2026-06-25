@@ -283,7 +283,10 @@ void ADS1232_ADC::tare() {
     // tareNoDelay is instant — captures current buffer average.
     uint32_t timeout = millis() + 2000; // 2 second timeout guard
     while (!getTareStatus()) {
-        if (millis() > timeout) break;
+        if (millis() > timeout) {
+            _signalTimeoutFlag = true;
+            break;
+        }
         delay(10);
     }
 }
@@ -304,9 +307,9 @@ void ADS1232_ADC::tareNoDelay() {
 
         if (count > 0) {
             _tareOffset = (float)sum / count;
+            _tareComplete = true;
         }
 
-        _tareComplete = true;
         xSemaphoreGive(_mutex);
     }
 }

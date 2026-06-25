@@ -58,6 +58,20 @@ class DefaultStartupTests(unittest.TestCase):
             ],
         )
 
+    def test_tare_no_delay_only_completes_with_samples(self):
+        body = method_body("tareNoDelay")
+
+        self.assertEqual(1, body.count("_tareComplete = true;"))
+        self.assertRegex(
+            body,
+            r"if \(count > 0\) \{[^}]*_tareOffset = \(float\)sum / count;[^}]*_tareComplete = true;",
+        )
+
+    def test_tare_timeout_marks_signal_timeout(self):
+        body = method_body("tare")
+
+        self.assertIn("_signalTimeoutFlag = true;", body)
+
 
 if __name__ == "__main__":
     unittest.main()
