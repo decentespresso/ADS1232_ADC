@@ -369,6 +369,18 @@ void ADS1232_ADC::powerUp() {
 void ADS1232_ADC::setChannelInUse(int channel) {
     if (_a0 == 255) return;
     digitalWrite(_a0, channel ? HIGH : LOW);
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        for (int i = 0; i < ADS1232_BUFFER_SIZE; i++) {
+            _dataBuffer[i] = 0;
+        }
+        _bufferIdx = 0;
+        _validSamples = 0;
+        xSemaphoreGive(_mutex);
+    }
+
+    _lastDoutLowMillis = millis();
+    _signalTimeoutFlag = false;
 }
 
 int ADS1232_ADC::getChannelInUse() {

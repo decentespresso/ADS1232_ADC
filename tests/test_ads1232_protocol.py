@@ -38,6 +38,16 @@ class ADS1232ProtocolTests(unittest.TestCase):
         self.assertIn("for (uint8_t i = 0; i < 25; i++)", body)
         self.assertNotIn("_gain ==", body)
 
+    def test_channel_change_resets_sample_state(self):
+        body = normalized(method_body("setChannelInUse"))
+
+        self.assertIn("if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE)", body)
+        self.assertIn("for (int i = 0; i < ADS1232_BUFFER_SIZE; i++) { _dataBuffer[i] = 0; }", body)
+        self.assertIn("_bufferIdx = 0;", body)
+        self.assertIn("_validSamples = 0;", body)
+        self.assertIn("_lastDoutLowMillis = millis();", body)
+        self.assertIn("_signalTimeoutFlag = false;", body)
+
 
 if __name__ == "__main__":
     unittest.main()
