@@ -43,6 +43,8 @@ Download this repository as a ZIP and install via **Sketch > Include Library > A
 
 Connect load cell excitation and signal lines to the ADS1232 analog inputs per the [datasheet](https://www.ti.com/lit/ds/symlink/ads1232.pdf).
 
+ADS1232 gain is set by the GAIN0/GAIN1 pins. The A0 pin selects the input channel when it is wired; SCLK pulses do not select gain or channel.
+
 ## Quick Start
 
 ### Background Sampling (recommended)
@@ -155,7 +157,7 @@ ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn,
 | Method | Description |
 |--------|-------------|
 | `begin()` | Initialize GPIO pins, power up the ADC |
-| `begin(uint8_t gain)` | Initialize with specific gain setting |
+| `begin(uint8_t gain)` | Initialize with legacy pulse-count compatibility setting |
 | `start(unsigned long t)` | Stabilize for `t` ms + tare |
 | `start(unsigned long t, bool dotare)` | Stabilize, optionally tare |
 | `beginTask(uint32_t intervalMs)` | Start FreeRTOS background sampling task |
@@ -187,7 +189,7 @@ ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn,
 |--------|-------------|
 | `powerDown()` | Power down the ADC |
 | `powerUp()` | Power up the ADC |
-| `setGain(uint8_t gain)` | Set gain (affects clock pulse count) |
+| `setGain(uint8_t gain)` | Legacy compatibility setting; ADS1232 gain is hardware-controlled |
 | `setChannelInUse(int channel)` | Select ADC channel (0 or 1) |
 | `getChannelInUse()` | Get current channel |
 | `setReverseOutput()` | Flip output sign (for inverted load-cell wiring) |
