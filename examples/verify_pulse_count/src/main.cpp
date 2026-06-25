@@ -120,7 +120,7 @@ void setup() {
     for (int t = 0; t < NUM_TESTS; t++) {
         scale.setGain(tests[t].gain);
 
-        // Throwaway read — applies new gain for the NEXT conversion
+        // Throwaway read — exercises the selected compatibility setting
         if (waitForDataReady(500)) {
 #if USE_MONITOR_PIN
             pulseCount = 0;
