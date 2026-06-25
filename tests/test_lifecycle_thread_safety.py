@@ -65,6 +65,15 @@ class LifecycleThreadSafetyTests(unittest.TestCase):
             )
             self.assertIn("xSemaphoreGive(_mutex);", body, name)
 
+    def test_update_buffer_copies_debug_callback_before_invoking(self):
+        body = normalized(method_body("_updateBuffer"))
+
+        self.assertIn("DebugCallback callback = nullptr;", body)
+        self.assertIn("callback = _debugCallback;", body)
+        self.assertIn("if (callback != nullptr)", body)
+        self.assertIn("callback(info);", body)
+        self.assertNotIn("_debugCallback(info);", body)
+
 
 if __name__ == "__main__":
     unittest.main()

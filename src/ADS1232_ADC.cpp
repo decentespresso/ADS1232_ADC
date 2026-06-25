@@ -222,7 +222,7 @@ bool ADS1232_ADC::_readADCRaw() {
 // Internal: _updateBuffer() - Updates ring buffer, fires debug callback
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::_updateBuffer(long newValue) {
-    bool shouldFireCallback = false;
+    DebugCallback callback = nullptr;
 
     if (_mutex != NULL) {
         if (xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
@@ -238,7 +238,7 @@ void ADS1232_ADC::_updateBuffer(long newValue) {
 
             // Capture debug snapshot under mutex, fire callback after release
             if (_debugEnabled && _debugCallback != nullptr) {
-                shouldFireCallback = true;
+                callback = _debugCallback;
             }
 
             xSemaphoreGive(_mutex);
@@ -246,9 +246,9 @@ void ADS1232_ADC::_updateBuffer(long newValue) {
     }
 
     // Fire callback outside mutex — callback may call getData() safely
-    if (shouldFireCallback) {
+    if (callback != nullptr) {
         ADS1232DebugInfo info = getDebugInfo();
-        _debugCallback(info);
+        callback(info);
     }
 }
 
