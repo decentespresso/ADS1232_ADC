@@ -35,10 +35,15 @@ ADS1232_ADC::ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn, uint8_t a0,
 }
 
 bool ADS1232_ADC::_ensureMutex() {
-    if (_mutex != NULL) return true;
+    if (_mutex == NULL) {
+        _mutex = xSemaphoreCreateMutex();
+    }
 
-    _mutex = xSemaphoreCreateMutex();
-    return _mutex != NULL;
+    if (_ioMutex == NULL) {
+        _ioMutex = xSemaphoreCreateMutex();
+    }
+
+    return _mutex != NULL && _ioMutex != NULL;
 }
 
 // ---------------------------------------------------------------------------

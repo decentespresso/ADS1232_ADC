@@ -34,13 +34,16 @@ def method_body(name):
 
 
 class LifecycleThreadSafetyTests(unittest.TestCase):
-    def test_begin_paths_recreate_mutex_after_end(self):
+    def test_begin_paths_recreate_mutexes_after_end(self):
         header = HEADER.read_text(encoding="utf-8")
+        body = normalized(method_body("_ensureMutex"))
 
         self.assertIn("bool _ensureMutex();", header)
         self.assertIn("if (!_ensureMutex()) return;", normalized(method_body("begin")))
         self.assertIn("if (!_ensureMutex()) return;", normalized(method_body("beginTask")))
-        self.assertIn("_mutex = xSemaphoreCreateMutex();", method_body("_ensureMutex"))
+        self.assertIn("_mutex = xSemaphoreCreateMutex();", body)
+        self.assertIn("_ioMutex = xSemaphoreCreateMutex();", body)
+        self.assertIn("return _mutex != NULL && _ioMutex != NULL;", body)
 
     def test_public_state_accessors_use_mutex(self):
         methods = [
