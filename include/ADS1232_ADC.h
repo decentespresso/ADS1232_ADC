@@ -110,6 +110,7 @@ private:
     // Threading & Sync
     TaskHandle_t _taskHandle = NULL;
     SemaphoreHandle_t _mutex = NULL;
+    SemaphoreHandle_t _ioMutex = NULL;
     volatile bool _taskRunning = false;  // Flag to signal task to stop
 
     // Data Storage

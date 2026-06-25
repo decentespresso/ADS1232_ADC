@@ -31,6 +31,7 @@ ADS1232_ADC::ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn, uint8_t a0,
 
     // Create the mutex for thread safety
     _mutex = xSemaphoreCreateMutex();
+    _ioMutex = xSemaphoreCreateMutex();
 }
 
 // ---------------------------------------------------------------------------
@@ -115,6 +116,11 @@ void ADS1232_ADC::end() {
         vSemaphoreDelete(_mutex);
         _mutex = NULL;
     }
+
+    if (_ioMutex != NULL) {
+        vSemaphoreDelete(_ioMutex);
+        _ioMutex = NULL;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -173,6 +179,8 @@ void ADS1232_ADC::_samplingTask(void* pvParameters) {
 // Internal: _readADCRaw() - Bit-banging ADC read
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::_readADCRaw() {
+    if (_ioMutex == NULL || xSemaphoreTake(_ioMutex, (TickType_t)10) != pdTRUE) return;
+
     // Measure the interval since the previous conversion — this is the true
     // sample period (DOUT-ready to DOUT-ready), which getSPS()/getConversionTime()
     // report. Timing the read loop itself would only yield the bit-bang duration
@@ -186,8 +194,7 @@ void ADS1232_ADC::_readADCRaw() {
     unsigned long data = 0;
     uint8_t dout;
 
-    // Read 24 data bits + send GAIN extra pulses
-    for (uint8_t i = 0; i < (24 + (_gain == 128 ? 1 : (_gain == 64 ? 2 : 2))); i++) {
+    for (uint8_t i = 0; i < 25; i++) {
         digitalWrite(_sck, HIGH);
         delayMicroseconds(1);
         digitalWrite(_sck, LOW);
@@ -203,6 +210,7 @@ void ADS1232_ADC::_readADCRaw() {
 
     // Update the data buffer with the new value
     _updateBuffer((long)data);
+    xSemaphoreGive(_ioMutex);
 }
 
 // ---------------------------------------------------------------------------
@@ -391,10 +399,26 @@ void ADS1232_ADC::powerUp() {
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::setChannelInUse(int channel) {
     if (_a0 == 255) return;
+    if (_ioMutex == NULL || xSemaphoreTake(_ioMutex, (TickType_t)10) != pdTRUE) return;
+
     digitalWrite(_a0, channel ? HIGH : LOW);
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        for (int i = 0; i < ADS1232_BUFFER_SIZE; i++) {
+            _dataBuffer[i] = 0;
+        }
+        _bufferIdx = 0;
+        _validSamples = 0;
+        xSemaphoreGive(_mutex);
+    }
+
+    _lastDoutLowMillis = millis();
+    _signalTimeoutFlag = false;
+    xSemaphoreGive(_ioMutex);
 }
 
 int ADS1232_ADC::getChannelInUse() {
+    if (_a0 == 255) return -1;
     return digitalRead(_a0) == HIGH ? 1 : 0;
 }
 
