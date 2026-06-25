@@ -49,6 +49,16 @@ class NumericSafetyTests(unittest.TestCase):
         self.assertNotIn("long sum = 0;", source)
         self.assertEqual(3, source.count("int64_t sum = 0;"))
 
+    def test_invalid_calibration_factors_are_rejected(self):
+        set_cal_body = normalized(method_body("setCalFactor"))
+        new_cal_body = normalized(method_body("getNewCalibration"))
+
+        self.assertIn("if (cal == 0.0f || !isfinite(cal)) { return; }", set_cal_body)
+        self.assertIn(
+            "if (newCalFactor == 0.0f || !isfinite(newCalFactor)) return _calFactor;",
+            new_cal_body,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

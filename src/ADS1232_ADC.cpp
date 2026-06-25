@@ -333,6 +333,10 @@ void ADS1232_ADC::setGain(uint8_t gain) {
 // setCalFactor() & getCalFactor()
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::setCalFactor(float cal) {
+    if (cal == 0.0f || !isfinite(cal)) {
+        return;
+    }
+
     if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
         _calFactor = cal;
         _calFactorRecip = 1.0f / cal;
@@ -437,6 +441,7 @@ float ADS1232_ADC::getNewCalibration(float known_mass) {
     if (known_mass == 0) return _calFactor;
 
     float newCalFactor = (currentValue * _calFactor) / known_mass;
+    if (newCalFactor == 0.0f || !isfinite(newCalFactor)) return _calFactor;
     setCalFactor(newCalFactor);
     return newCalFactor;
 }
