@@ -149,8 +149,7 @@ void ADS1232_ADC::_samplingTask(void* pvParameters) {
         vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(_taskIntervalMs));
 
         // Check if DOUT is LOW (data ready)
-        if (digitalRead(_dout) == LOW) {
-            _readADCRaw();
+        if (digitalRead(_dout) == LOW && _readADCRaw()) {
             _lastDoutLowMillis = millis();
             _signalTimeoutFlag = false;
         } else {
@@ -170,8 +169,8 @@ void ADS1232_ADC::_samplingTask(void* pvParameters) {
 // ---------------------------------------------------------------------------
 // Internal: _readADCRaw() - Bit-banging ADC read
 // ---------------------------------------------------------------------------
-void ADS1232_ADC::_readADCRaw() {
-    if (_ioMutex == NULL || xSemaphoreTake(_ioMutex, (TickType_t)10) != pdTRUE) return;
+bool ADS1232_ADC::_readADCRaw() {
+    if (_ioMutex == NULL || xSemaphoreTake(_ioMutex, (TickType_t)10) != pdTRUE) return false;
 
     // Measure the interval since the previous conversion — this is the true
     // sample period (DOUT-ready to DOUT-ready), which getSPS()/getConversionTime()
@@ -203,6 +202,7 @@ void ADS1232_ADC::_readADCRaw() {
     // Update the data buffer with the new value
     _updateBuffer((long)data);
     xSemaphoreGive(_ioMutex);
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -430,8 +430,7 @@ uint8_t ADS1232_ADC::update() {
     // Background task handles reads — don't bit-bang concurrently
     if (_taskRunning) return 0;
 
-    if (digitalRead(_dout) == LOW) {
-        _readADCRaw();
+    if (digitalRead(_dout) == LOW && _readADCRaw()) {
         return 1; // Data was read
     }
     return 0; // No data available
@@ -447,8 +446,7 @@ bool ADS1232_ADC::refreshDataSet() {
 
     while (currentCount < targetCount) {
         if (millis() > timeout) return false;
-        if (digitalRead(_dout) == LOW) {
-            _readADCRaw();
+        if (digitalRead(_dout) == LOW && _readADCRaw()) {
             currentCount++;
         }
         delay(1);

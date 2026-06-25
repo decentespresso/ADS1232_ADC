@@ -136,7 +136,7 @@ private:
 
     // Internal processing
     void _samplingTask(void* pvParameters);         // The FreeRTOS task function
-    void _readADCRaw();                             // The bit-banging ADC reader
+    bool _readADCRaw();                             // The bit-banging ADC reader
     void _updateBuffer(long newValue);              // Updates the running sum and buffer
     ADS1232DebugInfo _captureDebugInfoLocked();     // Snapshot under mutex
 };

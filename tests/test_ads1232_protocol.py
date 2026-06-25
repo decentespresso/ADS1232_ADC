@@ -34,10 +34,14 @@ def method_body(name):
 
 class ADS1232ProtocolTests(unittest.TestCase):
     def test_adc_read_always_sends_one_post_read_pulse(self):
+        header = normalized(HEADER.read_text(encoding="utf-8"))
         body = normalized(method_body("_readADCRaw"))
 
+        self.assertIn("bool _readADCRaw();", header)
+        self.assertIn("return false;", body)
         self.assertIn("for (uint8_t i = 0; i < 25; i++)", body)
         self.assertNotIn("_gain ==", body)
+        self.assertIn("return true;", body)
 
     def test_channel_change_resets_sample_state(self):
         body = normalized(method_body("setChannelInUse"))
@@ -59,6 +63,17 @@ class ADS1232ProtocolTests(unittest.TestCase):
         self.assertLess(read_body.index("_updateBuffer((long)data);"), read_body.rindex("xSemaphoreGive(_ioMutex);"))
         self.assertLess(channel_body.index("xSemaphoreTake(_ioMutex, (TickType_t)10)"), channel_body.index("digitalWrite(_a0, channel ? HIGH : LOW);"))
         self.assertLess(channel_body.index("_signalTimeoutFlag = false;"), channel_body.rindex("xSemaphoreGive(_ioMutex);"))
+
+    def test_callers_only_report_reads_after_io_lock_success(self):
+        task_body = normalized(method_body("_samplingTask"))
+        update_body = normalized(method_body("update"))
+        refresh_body = normalized(method_body("refreshDataSet"))
+
+        self.assertIn("if (digitalRead(_dout) == LOW && _readADCRaw())", task_body)
+        self.assertIn("if (digitalRead(_dout) == LOW && _readADCRaw())", update_body)
+        self.assertLess(update_body.index("_readADCRaw()"), update_body.index("return 1;"))
+        self.assertIn("if (digitalRead(_dout) == LOW && _readADCRaw())", refresh_body)
+        self.assertLess(refresh_body.index("_readADCRaw()"), refresh_body.index("currentCount++;"))
 
     def test_unused_channel_pin_returns_minus_one(self):
         body = normalized(method_body("getChannelInUse"))
