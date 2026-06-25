@@ -16,7 +16,7 @@ ADS1232_ADC::ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn, uint8_t a0,
                          int samples, bool ignHigh, bool ignLow)
     : _dout(dout), _sck(sck), _pdwn(pdwn), _a0(a0)
 {
-    _maxSamples = min(samples, ADS1232_BUFFER_SIZE);
+    _maxSamples = samples < 1 ? 1 : (samples > ADS1232_BUFFER_SIZE ? ADS1232_BUFFER_SIZE : samples);
     _ignHigh = ignHigh;
     _ignLow = ignLow;
     _gain = 128;
