@@ -72,6 +72,15 @@ class DefaultStartupTests(unittest.TestCase):
 
         self.assertIn("_signalTimeoutFlag = true;", body)
 
+    def test_begin_task_handles_creation_failure(self):
+        body = method_body("beginTask")
+
+        self.assertIn("BaseType_t taskStatus = xTaskCreatePinnedToCore", body)
+        self.assertRegex(
+            body,
+            r"if \(taskStatus == pdPASS\) \{[^}]*_taskRunning = true;[^}]*\} else \{[^}]*_taskHandle = NULL;[^}]*_taskRunning = false;",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -72,13 +72,14 @@ void ADS1232_ADC::beginTask(uint32_t intervalMs) {
     }
 
     _taskIntervalMs = intervalMs;  // Store the interval for the task to use
-    _taskRunning = true;
     _lastDoutLowMillis = millis();  // Reset timeout on start
 
     // Create the FreeRTOS task
-    xTaskCreatePinnedToCore(
+    BaseType_t taskStatus = xTaskCreatePinnedToCore(
         [](void* pvParameters) {
-            static_cast<ADS1232_ADC*>(pvParameters)->_samplingTask(NULL);
+            ADS1232_ADC* instance = static_cast<ADS1232_ADC*>(pvParameters);
+            instance->_taskRunning = true;
+            instance->_samplingTask(NULL);
         },
         "ADS1232_Task",
         4096,               // Stack size
@@ -87,6 +88,13 @@ void ADS1232_ADC::beginTask(uint32_t intervalMs) {
         &_taskHandle,       // Task handle
         1                   // Core 1 (keep UI on core 0)
     );
+
+    if (taskStatus == pdPASS) {
+        _taskRunning = true;
+    } else {
+        _taskHandle = NULL;
+        _taskRunning = false;
+    }
 }
 
 // ---------------------------------------------------------------------------
