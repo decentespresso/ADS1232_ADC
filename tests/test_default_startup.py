@@ -9,8 +9,10 @@ SOURCE = ROOT / "src" / "ADS1232_ADC.cpp"
 
 def method_body(name):
     text = SOURCE.read_text(encoding="utf-8")
-    needle = f"void ADS1232_ADC::{name}("
-    start = text.index(needle)
+    match = re.search(rf"\b\w+\s+ADS1232_ADC::{name}\(", text)
+    if match is None:
+        raise AssertionError(f"method not found: {name}")
+    start = match.start()
     opening = text.index("{", start)
     depth = 0
 
@@ -79,6 +81,16 @@ class DefaultStartupTests(unittest.TestCase):
         self.assertRegex(
             body,
             r"if \(taskStatus == pdPASS\) \{[^}]*_taskRunning = true;[^}]*\} else \{[^}]*_taskHandle = NULL;[^}]*_taskRunning = false;",
+        )
+
+    def test_polling_update_maintains_signal_timeout(self):
+        body = method_body("update")
+
+        self.assertIn("_lastDoutLowMillis = millis();", body)
+        self.assertIn("_signalTimeoutFlag = false;", body)
+        self.assertRegex(
+            body,
+            r"if \(millis\(\) - _lastDoutLowMillis > _signalTimeoutMs\) \{[^}]*_signalTimeoutFlag = true;",
         )
 
 

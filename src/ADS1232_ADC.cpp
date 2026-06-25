@@ -426,7 +426,12 @@ uint8_t ADS1232_ADC::update() {
 
     if (digitalRead(_dout) == LOW) {
         _readADCRaw();
+        _lastDoutLowMillis = millis();
+        _signalTimeoutFlag = false;
         return 1; // Data was read
+    }
+    if (millis() - _lastDoutLowMillis > _signalTimeoutMs) {
+        _signalTimeoutFlag = true;
     }
     return 0; // No data available
 }
