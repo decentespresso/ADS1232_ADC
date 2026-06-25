@@ -55,7 +55,7 @@ class NumericSafetyTests(unittest.TestCase):
 
         self.assertIn("if (cal == 0.0f || !isfinite(cal)) { return; }", set_cal_body)
         self.assertIn(
-            "if (newCalFactor == 0.0f || !isfinite(newCalFactor)) return _calFactor;",
+            "if (newCalFactor == 0.0f || !isfinite(newCalFactor)) return calFactor;",
             new_cal_body,
         )
 

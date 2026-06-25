@@ -34,10 +34,24 @@ ADS1232_ADC::ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn, uint8_t a0,
     _ioMutex = xSemaphoreCreateMutex();
 }
 
+bool ADS1232_ADC::_ensureMutex() {
+    if (_mutex == NULL) {
+        _mutex = xSemaphoreCreateMutex();
+    }
+
+    if (_ioMutex == NULL) {
+        _ioMutex = xSemaphoreCreateMutex();
+    }
+
+    return _mutex != NULL && _ioMutex != NULL;
+}
+
 // ---------------------------------------------------------------------------
 // Lifecycle: begin()
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::begin() {
+    if (!_ensureMutex()) return;
+
     pinMode(_dout, INPUT);
     pinMode(_sck, OUTPUT);
     pinMode(_pdwn, OUTPUT);
@@ -51,6 +65,8 @@ void ADS1232_ADC::begin() {
 }
 
 void ADS1232_ADC::begin(uint8_t gain) {
+    if (!_ensureMutex()) return;
+
     pinMode(_dout, INPUT);
     pinMode(_sck, OUTPUT);
     pinMode(_pdwn, OUTPUT);
@@ -67,6 +83,8 @@ void ADS1232_ADC::begin(uint8_t gain) {
 // Lifecycle: beginTask() - Starts the background FreeRTOS sampling task
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::beginTask(uint32_t intervalMs) {
+    if (!_ensureMutex()) return;
+
     if (_taskHandle != NULL) {
         // Task already running
         return;
@@ -157,8 +175,7 @@ void ADS1232_ADC::_samplingTask(void* pvParameters) {
         vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(_taskIntervalMs));
 
         // Check if DOUT is LOW (data ready)
-        if (digitalRead(_dout) == LOW) {
-            _readADCRaw();
+        if (digitalRead(_dout) == LOW && _readADCRaw()) {
             _lastDoutLowMillis = millis();
             _signalTimeoutFlag = false;
         } else {
@@ -178,8 +195,8 @@ void ADS1232_ADC::_samplingTask(void* pvParameters) {
 // ---------------------------------------------------------------------------
 // Internal: _readADCRaw() - Bit-banging ADC read
 // ---------------------------------------------------------------------------
-void ADS1232_ADC::_readADCRaw() {
-    if (_ioMutex == NULL || xSemaphoreTake(_ioMutex, (TickType_t)10) != pdTRUE) return;
+bool ADS1232_ADC::_readADCRaw() {
+    if (_ioMutex == NULL || xSemaphoreTake(_ioMutex, (TickType_t)10) != pdTRUE) return false;
 
     // Measure the interval since the previous conversion — this is the true
     // sample period (DOUT-ready to DOUT-ready), which getSPS()/getConversionTime()
@@ -211,13 +228,14 @@ void ADS1232_ADC::_readADCRaw() {
     // Update the data buffer with the new value
     _updateBuffer((long)data);
     xSemaphoreGive(_ioMutex);
+    return true;
 }
 
 // ---------------------------------------------------------------------------
 // Internal: _updateBuffer() - Updates ring buffer, fires debug callback
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::_updateBuffer(long newValue) {
-    bool shouldFireCallback = false;
+    DebugCallback callback = nullptr;
 
     if (_mutex != NULL) {
         if (xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
@@ -233,7 +251,7 @@ void ADS1232_ADC::_updateBuffer(long newValue) {
 
             // Capture debug snapshot under mutex, fire callback after release
             if (_debugEnabled && _debugCallback != nullptr) {
-                shouldFireCallback = true;
+                callback = _debugCallback;
             }
 
             xSemaphoreGive(_mutex);
@@ -241,9 +259,9 @@ void ADS1232_ADC::_updateBuffer(long newValue) {
     }
 
     // Fire callback outside mutex — callback may call getData() safely
-    if (shouldFireCallback) {
+    if (callback != nullptr) {
         ADS1232DebugInfo info = getDebugInfo();
-        _debugCallback(info);
+        callback(info);
     }
 }
 
@@ -336,9 +354,15 @@ void ADS1232_ADC::tareNoDelay() {
 bool ADS1232_ADC::getTareStatus() {
     // One-shot: return true once after tare completes, then false.
     // Matches openscale's expectation — prevents re-entering tare-reset.
-    bool t = _tareComplete;
-    _tareComplete = false;
-    return t;
+    bool result = false;
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        result = _tareComplete;
+        _tareComplete = false;
+        xSemaphoreGive(_mutex);
+    }
+
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -368,7 +392,14 @@ void ADS1232_ADC::setCalFactor(float cal) {
 }
 
 float ADS1232_ADC::getCalFactor() {
-    return _calFactor;
+    float result = _calFactor;
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        result = _calFactor;
+        xSemaphoreGive(_mutex);
+    }
+
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -452,8 +483,7 @@ uint8_t ADS1232_ADC::update() {
     // Background task handles reads — don't bit-bang concurrently
     if (_taskRunning) return 0;
 
-    if (digitalRead(_dout) == LOW) {
-        _readADCRaw();
+    if (digitalRead(_dout) == LOW && _readADCRaw()) {
         _lastDoutLowMillis = millis();
         _signalTimeoutFlag = false;
         return 1; // Data was read
@@ -474,8 +504,7 @@ bool ADS1232_ADC::refreshDataSet() {
 
     while (currentCount < targetCount) {
         if (millis() > timeout) return false;
-        if (digitalRead(_dout) == LOW) {
-            _readADCRaw();
+        if (digitalRead(_dout) == LOW && _readADCRaw()) {
             currentCount++;
         }
         delay(1);
@@ -485,10 +514,11 @@ bool ADS1232_ADC::refreshDataSet() {
 
 float ADS1232_ADC::getNewCalibration(float known_mass) {
     float currentValue = getData();
-    if (known_mass == 0) return _calFactor;
+    float calFactor = getCalFactor();
+    if (known_mass == 0) return calFactor;
 
-    float newCalFactor = (currentValue * _calFactor) / known_mass;
-    if (newCalFactor == 0.0f || !isfinite(newCalFactor)) return _calFactor;
+    float newCalFactor = (currentValue * calFactor) / known_mass;
+    if (newCalFactor == 0.0f || !isfinite(newCalFactor)) return calFactor;
     setCalFactor(newCalFactor);
     return newCalFactor;
 }
@@ -498,15 +528,32 @@ float ADS1232_ADC::getNewCalibration(float known_mass) {
 // ---------------------------------------------------------------------------
 
 void ADS1232_ADC::setDebugCallback(DebugCallback callback) {
-    _debugCallback = callback;
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        _debugCallback = callback;
+        xSemaphoreGive(_mutex);
+    } else {
+        _debugCallback = callback;
+    }
 }
 
 void ADS1232_ADC::setDebugEnabled(bool enabled) {
-    _debugEnabled = enabled;
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        _debugEnabled = enabled;
+        xSemaphoreGive(_mutex);
+    } else {
+        _debugEnabled = enabled;
+    }
 }
 
 bool ADS1232_ADC::getDebugEnabled() {
-    return _debugEnabled;
+    bool result = _debugEnabled;
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        result = _debugEnabled;
+        xSemaphoreGive(_mutex);
+    }
+
+    return result;
 }
 
 ADS1232DebugInfo ADS1232_ADC::getDebugInfo() {
@@ -566,11 +613,23 @@ ADS1232DebugInfo ADS1232_ADC::_captureDebugInfoLocked() {
 }
 
 void ADS1232_ADC::setSignalTimeoutMs(uint32_t ms) {
-    _signalTimeoutMs = ms;
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        _signalTimeoutMs = ms;
+        xSemaphoreGive(_mutex);
+    } else {
+        _signalTimeoutMs = ms;
+    }
 }
 
 bool ADS1232_ADC::getSignalTimeoutFlag() {
-    return _signalTimeoutFlag;
+    bool result = _signalTimeoutFlag;
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        result = _signalTimeoutFlag;
+        xSemaphoreGive(_mutex);
+    }
+
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -595,11 +654,23 @@ float ADS1232_ADC::getSettlingTime() {
 // ---------------------------------------------------------------------------
 
 long ADS1232_ADC::getTareOffset() {
-    return (long)_tareOffset;
+    long result = 0;
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        result = (long)_tareOffset;
+        xSemaphoreGive(_mutex);
+    }
+
+    return result;
 }
 
 void ADS1232_ADC::setTareOffset(long newoffset) {
-    _tareOffset = (float)newoffset;
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        _tareOffset = (float)newoffset;
+        xSemaphoreGive(_mutex);
+    } else {
+        _tareOffset = (float)newoffset;
+    }
 }
 
 // ---------------------------------------------------------------------------
