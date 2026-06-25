@@ -16,7 +16,7 @@ ADS1232_ADC::ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn, uint8_t a0,
                          int samples, bool ignHigh, bool ignLow)
     : _dout(dout), _sck(sck), _pdwn(pdwn), _a0(a0)
 {
-    _maxSamples = min(samples, ADS1232_BUFFER_SIZE);
+    _maxSamples = samples < 1 ? 1 : (samples > ADS1232_BUFFER_SIZE ? ADS1232_BUFFER_SIZE : samples);
     _ignHigh = ignHigh;
     _ignLow = ignLow;
     _gain = 128;
@@ -246,7 +246,7 @@ float ADS1232_ADC::getData() {
     if (_mutex == NULL) return 0.0f;
 
     float result = 0.0f;
-    long sum = 0;
+    int64_t sum = 0;
     long high = LONG_MIN;
     long low = LONG_MAX;
     int count = 0;
@@ -306,7 +306,7 @@ void ADS1232_ADC::tareNoDelay() {
     if (_mutex == NULL) return;
 
     if (xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
-        long sum = 0;
+        int64_t sum = 0;
         int count = _validSamples;
 
         for (int i = 0; i < count; i++) {
@@ -344,6 +344,10 @@ void ADS1232_ADC::setGain(uint8_t gain) {
 // setCalFactor() & getCalFactor()
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::setCalFactor(float cal) {
+    if (cal == 0.0f || !isfinite(cal)) {
+        return;
+    }
+
     if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
         _calFactor = cal;
         _calFactorRecip = 1.0f / cal;
@@ -460,6 +464,7 @@ float ADS1232_ADC::getNewCalibration(float known_mass) {
     if (known_mass == 0) return _calFactor;
 
     float newCalFactor = (currentValue * _calFactor) / known_mass;
+    if (newCalFactor == 0.0f || !isfinite(newCalFactor)) return _calFactor;
     setCalFactor(newCalFactor);
     return newCalFactor;
 }
@@ -481,7 +486,7 @@ bool ADS1232_ADC::getDebugEnabled() {
 }
 
 ADS1232DebugInfo ADS1232_ADC::getDebugInfo() {
-    ADS1232DebugInfo info;
+    ADS1232DebugInfo info = {};
 
     if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
         info = _captureDebugInfoLocked();
@@ -492,7 +497,7 @@ ADS1232DebugInfo ADS1232_ADC::getDebugInfo() {
 }
 
 ADS1232DebugInfo ADS1232_ADC::_captureDebugInfoLocked() {
-    ADS1232DebugInfo info;
+    ADS1232DebugInfo info = {};
 
     info.timestamp = millis();
     info.rawValue = _lastRawValue;
@@ -506,7 +511,7 @@ ADS1232DebugInfo ADS1232_ADC::_captureDebugInfoLocked() {
 
     // Smoothed value and data-out-of-range (same logic as getData)
     if (_validSamples > 0) {
-        long sum = 0;
+        int64_t sum = 0;
         long high = LONG_MIN;
         long low = LONG_MAX;
         int count = 0;
