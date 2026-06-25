@@ -42,6 +42,29 @@ class LifecycleThreadSafetyTests(unittest.TestCase):
         self.assertIn("if (!_ensureMutex()) return;", normalized(method_body("beginTask")))
         self.assertIn("_mutex = xSemaphoreCreateMutex();", method_body("_ensureMutex"))
 
+    def test_public_state_accessors_use_mutex(self):
+        methods = [
+            "getCalFactor",
+            "getTareStatus",
+            "setDebugCallback",
+            "setDebugEnabled",
+            "getDebugEnabled",
+            "setSignalTimeoutMs",
+            "getSignalTimeoutFlag",
+            "getTareOffset",
+            "setTareOffset",
+        ]
+
+        for name in methods:
+            body = method_body(name)
+
+            self.assertIn(
+                "xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE",
+                body,
+                name,
+            )
+            self.assertIn("xSemaphoreGive(_mutex);", body, name)
+
 
 if __name__ == "__main__":
     unittest.main()

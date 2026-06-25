@@ -330,9 +330,15 @@ void ADS1232_ADC::tareNoDelay() {
 bool ADS1232_ADC::getTareStatus() {
     // One-shot: return true once after tare completes, then false.
     // Matches openscale's expectation — prevents re-entering tare-reset.
-    bool t = _tareComplete;
-    _tareComplete = false;
-    return t;
+    bool result = false;
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        result = _tareComplete;
+        _tareComplete = false;
+        xSemaphoreGive(_mutex);
+    }
+
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +364,14 @@ void ADS1232_ADC::setCalFactor(float cal) {
 }
 
 float ADS1232_ADC::getCalFactor() {
-    return _calFactor;
+    float result = _calFactor;
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        result = _calFactor;
+        xSemaphoreGive(_mutex);
+    }
+
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -459,15 +472,32 @@ float ADS1232_ADC::getNewCalibration(float known_mass) {
 // ---------------------------------------------------------------------------
 
 void ADS1232_ADC::setDebugCallback(DebugCallback callback) {
-    _debugCallback = callback;
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        _debugCallback = callback;
+        xSemaphoreGive(_mutex);
+    } else {
+        _debugCallback = callback;
+    }
 }
 
 void ADS1232_ADC::setDebugEnabled(bool enabled) {
-    _debugEnabled = enabled;
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        _debugEnabled = enabled;
+        xSemaphoreGive(_mutex);
+    } else {
+        _debugEnabled = enabled;
+    }
 }
 
 bool ADS1232_ADC::getDebugEnabled() {
-    return _debugEnabled;
+    bool result = _debugEnabled;
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        result = _debugEnabled;
+        xSemaphoreGive(_mutex);
+    }
+
+    return result;
 }
 
 ADS1232DebugInfo ADS1232_ADC::getDebugInfo() {
@@ -527,11 +557,23 @@ ADS1232DebugInfo ADS1232_ADC::_captureDebugInfoLocked() {
 }
 
 void ADS1232_ADC::setSignalTimeoutMs(uint32_t ms) {
-    _signalTimeoutMs = ms;
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        _signalTimeoutMs = ms;
+        xSemaphoreGive(_mutex);
+    } else {
+        _signalTimeoutMs = ms;
+    }
 }
 
 bool ADS1232_ADC::getSignalTimeoutFlag() {
-    return _signalTimeoutFlag;
+    bool result = _signalTimeoutFlag;
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        result = _signalTimeoutFlag;
+        xSemaphoreGive(_mutex);
+    }
+
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -556,11 +598,23 @@ float ADS1232_ADC::getSettlingTime() {
 // ---------------------------------------------------------------------------
 
 long ADS1232_ADC::getTareOffset() {
-    return (long)_tareOffset;
+    long result = 0;
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        result = (long)_tareOffset;
+        xSemaphoreGive(_mutex);
+    }
+
+    return result;
 }
 
 void ADS1232_ADC::setTareOffset(long newoffset) {
-    _tareOffset = (float)newoffset;
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        _tareOffset = (float)newoffset;
+        xSemaphoreGive(_mutex);
+    } else {
+        _tareOffset = (float)newoffset;
+    }
 }
 
 // ---------------------------------------------------------------------------
