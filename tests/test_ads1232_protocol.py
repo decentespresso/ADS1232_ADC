@@ -75,6 +75,13 @@ class ADS1232ProtocolTests(unittest.TestCase):
         self.assertIn("if (digitalRead(_dout) == LOW && _readADCRaw())", refresh_body)
         self.assertLess(refresh_body.index("_readADCRaw()"), refresh_body.index("currentCount++;"))
 
+    def test_refresh_dataset_clears_timeout_after_successful_read(self):
+        refresh_body = normalized(method_body("refreshDataSet"))
+
+        self.assertLess(refresh_body.index("_readADCRaw()"), refresh_body.index("_lastDoutLowMillis = millis();"))
+        self.assertLess(refresh_body.index("_lastDoutLowMillis = millis();"), refresh_body.index("_signalTimeoutFlag = false;"))
+        self.assertLess(refresh_body.index("_signalTimeoutFlag = false;"), refresh_body.index("currentCount++;"))
+
     def test_unused_channel_pin_returns_minus_one(self):
         body = normalized(method_body("getChannelInUse"))
 

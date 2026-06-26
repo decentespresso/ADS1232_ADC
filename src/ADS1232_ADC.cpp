@@ -505,6 +505,8 @@ bool ADS1232_ADC::refreshDataSet() {
     while (currentCount < targetCount) {
         if (millis() > timeout) return false;
         if (digitalRead(_dout) == LOW && _readADCRaw()) {
+            _lastDoutLowMillis = millis();
+            _signalTimeoutFlag = false;
             currentCount++;
         }
         delay(1);
