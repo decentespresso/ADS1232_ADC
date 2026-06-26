@@ -17,7 +17,7 @@
 // Default max samples constant for compatibility
 #define MAX_SAMPLES 64
 #define ADS1232_BUFFER_SIZE 256
-#define DEFAULT_SIGNAL_TIMEOUT_MS 100
+#define DEFAULT_SIGNAL_TIMEOUT_MS 300
 
 // Debug info structure — lightweight snapshot, no statistics precomputed.
 struct ADS1232DebugInfo {
@@ -81,7 +81,7 @@ public:
     void setDebugEnabled(bool enabled);             // Enable/disable debug callbacks
     bool getDebugEnabled();                         // Check if debug is enabled
     ADS1232DebugInfo getDebugInfo();                // Snapshot of current state
-    void setSignalTimeoutMs(uint32_t ms);           // Override DOUT timeout (default 100ms)
+    void setSignalTimeoutMs(uint32_t ms);           // Override DOUT timeout (default 300ms)
     bool getSignalTimeoutFlag();                    // True if DOUT inactive > timeout
 
     // Conversion timing diagnostics

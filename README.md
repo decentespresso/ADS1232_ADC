@@ -200,7 +200,7 @@ ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn,
 |--------|-------------|
 | `setDebugCallback(cb)` | Fire callback on each ADC conversion from the FreeRTOS task |
 | `getDebugInfo()` | Snapshot of current internal state |
-| `setSignalTimeoutMs(uint32_t)` | Override DOUT timeout (default 100ms) |
+| `setSignalTimeoutMs(uint32_t)` | Override DOUT timeout (default 300ms) |
 | `getSignalTimeoutFlag()` | True if DOUT inactive longer than timeout |
 | `getConversionTime()` | Latest bit-bang conversion time in ms |
 | `getSPS()` | Samples per second from latest conversion |
