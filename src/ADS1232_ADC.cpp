@@ -293,12 +293,10 @@ bool ADS1232_ADC::_readADCRaw() {
     }
 
     bool dataOutOfRange = (data == 0x7FFFFF || data == 0x800000);
-
-    // Flip the 24th bit to correct signed magnitude
-    data = data ^ 0x800000;
+    int32_t signedData = (data & 0x800000UL) ? (int32_t)(data | 0xFF000000UL) : (int32_t)data;
 
     // Update the data buffer with the new value
-    _updateBuffer((long)data, dataOutOfRange);
+    _updateBuffer((long)signedData, dataOutOfRange);
     xSemaphoreGive(_ioMutex);
     return true;
 }
@@ -313,7 +311,7 @@ void ADS1232_ADC::_updateBuffer(long newValue, bool dataOutOfRange) {
         if (xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
             // Apply reverse if enabled
             if (_reverseVal) {
-                newValue = 0xFFFFFF - newValue;
+                newValue = -newValue;
             }
 
             _dataBuffer[_bufferIdx] = newValue;

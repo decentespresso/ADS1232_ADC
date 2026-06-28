@@ -26,7 +26,7 @@
 // Debug info structure — lightweight snapshot, no statistics precomputed.
 struct ADS1232DebugInfo {
     unsigned long timestamp;        // millis() when debug info was captured
-    long rawValue;                  // Latest raw 24-bit value read (after reverse)
+    long rawValue;                  // Latest signed 24-bit value read (after reverse)
     long smoothedValue;             // Smoothed value after filtering
     long tareOffset;                // Current tare offset
     float conversionTimeMs;         // Latest conversion time in ms
