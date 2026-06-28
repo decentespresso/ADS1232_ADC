@@ -58,6 +58,25 @@ void ADS1232_ADC::_resetSampleStateLocked(bool resetTareOffset) {
     }
 }
 
+
+unsigned long ADS1232_ADC::_refreshTimeoutForCount(int targetCount) {
+    unsigned long conversionTimeMs = ADS1232_DEFAULT_CONVERSION_MS;
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        if (_conversionTimeMicros > 0) {
+            conversionTimeMs = (_conversionTimeMicros + 999) / 1000;
+        }
+        xSemaphoreGive(_mutex);
+    }
+
+    if (conversionTimeMs < 1) {
+        conversionTimeMs = 1;
+    }
+
+    unsigned long samplesToWaitFor = targetCount > 0 ? (unsigned long)targetCount : 1;
+    return ((samplesToWaitFor + 2) * conversionTimeMs) + ADS1232_REFRESH_TIMEOUT_MARGIN_MS;
+}
+
 // ---------------------------------------------------------------------------
 // Lifecycle: begin()
 // ---------------------------------------------------------------------------
@@ -537,15 +556,23 @@ uint8_t ADS1232_ADC::update() {
 }
 
 bool ADS1232_ADC::refreshDataSet() {
-    // Background task handles reads — don't bit-bang concurrently
+    // Background task handles reads - don't bit-bang concurrently
     if (_taskRunning) return false;
 
-    int targetCount = _samplesInUse + (_ignHigh ? 1 : 0) + (_ignLow ? 1 : 0);
+    int targetCount = 0;
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        targetCount = _samplesInUse + (_ignHigh ? 1 : 0) + (_ignLow ? 1 : 0);
+        xSemaphoreGive(_mutex);
+    } else {
+        return false;
+    }
+
     int currentCount = 0;
-    unsigned long timeout = millis() + 5000; // 5s timeout (~50 samples at 10SPS)
+    unsigned long startedAt = millis();
+    unsigned long timeoutMs = _refreshTimeoutForCount(targetCount);
 
     while (currentCount < targetCount) {
-        if (millis() > timeout) return false;
+        if (millis() - startedAt > timeoutMs) return false;
         if (digitalRead(_dout) == LOW && _readADCRaw()) {
             _lastDoutLowMillis = millis();
             _signalTimeoutFlag = false;

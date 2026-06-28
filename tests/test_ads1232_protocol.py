@@ -94,6 +94,17 @@ class ADS1232ProtocolTests(unittest.TestCase):
         self.assertLess(refresh_body.index("_lastDoutLowMillis = millis();"), refresh_body.index("_signalTimeoutFlag = false;"))
         self.assertLess(refresh_body.index("_signalTimeoutFlag = false;"), refresh_body.index("currentCount++;"))
 
+
+    def test_refresh_dataset_uses_scaled_timeout(self):
+        refresh_body = normalized(method_body("refreshDataSet"))
+        helper_body = normalized(method_body("_refreshTimeoutForCount"))
+
+        self.assertIn("unsigned long timeoutMs = _refreshTimeoutForCount(targetCount);", refresh_body)
+        self.assertIn("millis() - startedAt > timeoutMs", refresh_body)
+        self.assertIn("ADS1232_DEFAULT_CONVERSION_MS", helper_body)
+        self.assertIn("ADS1232_REFRESH_TIMEOUT_MARGIN_MS", helper_body)
+        self.assertNotIn("+ 5000", refresh_body)
+
     def test_unused_channel_pin_returns_minus_one(self):
         body = normalized(method_body("getChannelInUse"))
 

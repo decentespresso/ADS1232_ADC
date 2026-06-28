@@ -19,6 +19,8 @@
 #define ADS1232_BUFFER_SIZE 256
 #define DEFAULT_SIGNAL_TIMEOUT_MS 300
 #define ADS1232_MIN_TASK_INTERVAL_MS 1
+#define ADS1232_DEFAULT_CONVERSION_MS 100
+#define ADS1232_REFRESH_TIMEOUT_MARGIN_MS 1000
 
 // Debug info structure — lightweight snapshot, no statistics precomputed.
 struct ADS1232DebugInfo {
@@ -141,6 +143,7 @@ private:
     void _samplingTask(void* pvParameters);         // The FreeRTOS task function
     bool _readADCRaw();                             // The bit-banging ADC reader
     void _resetSampleStateLocked(bool resetTareOffset);
+    unsigned long _refreshTimeoutForCount(int targetCount);
     void _updateBuffer(long newValue);              // Updates the running sum and buffer
     ADS1232DebugInfo _captureDebugInfoLocked();     // Snapshot under mutex
 };
