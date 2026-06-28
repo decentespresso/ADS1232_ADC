@@ -53,6 +53,7 @@ void ADS1232_ADC::_resetSampleStateLocked(bool resetTareOffset) {
     _bufferIdx = 0;
     _validSamples = 0;
     _tareComplete = false;
+    _lastDataOutOfRange = false;
     if (resetTareOffset) {
         _tareOffset = 0;
     }
@@ -272,11 +273,13 @@ bool ADS1232_ADC::_readADCRaw() {
         }
     }
 
+    bool dataOutOfRange = (data == 0x7FFFFF || data == 0x800000);
+
     // Flip the 24th bit to correct signed magnitude
     data = data ^ 0x800000;
 
     // Update the data buffer with the new value
-    _updateBuffer((long)data);
+    _updateBuffer((long)data, dataOutOfRange);
     xSemaphoreGive(_ioMutex);
     return true;
 }
@@ -284,7 +287,7 @@ bool ADS1232_ADC::_readADCRaw() {
 // ---------------------------------------------------------------------------
 // Internal: _updateBuffer() - Updates ring buffer, fires debug callback
 // ---------------------------------------------------------------------------
-void ADS1232_ADC::_updateBuffer(long newValue) {
+void ADS1232_ADC::_updateBuffer(long newValue, bool dataOutOfRange) {
     DebugCallback callback = nullptr;
 
     if (_mutex != NULL) {
@@ -298,6 +301,7 @@ void ADS1232_ADC::_updateBuffer(long newValue) {
             _bufferIdx = (_bufferIdx + 1) % _samplesInUse;
             if (_validSamples < _samplesInUse) _validSamples++;
             _lastRawValue = newValue;
+            _lastDataOutOfRange = dataOutOfRange;
 
             // Capture debug snapshot under mutex, fire callback after release
             if (_debugEnabled && _debugCallback != nullptr) {
@@ -537,7 +541,14 @@ void ADS1232_ADC::setSamplesInUse(int samples) {
 }
 
 int ADS1232_ADC::getSamplesInUse() {
-    return _samplesInUse;
+    int result = _samplesInUse;
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        result = _samplesInUse;
+        xSemaphoreGive(_mutex);
+    }
+
+    return result;
 }
 
 uint8_t ADS1232_ADC::update() {
@@ -678,7 +689,7 @@ ADS1232DebugInfo ADS1232_ADC::_captureDebugInfoLocked() {
         }
     }
 
-    info.dataOutOfRange = (_lastRawValue > 0xFFFFFF);
+    info.dataOutOfRange = _lastDataOutOfRange;
 
     return info;
 }
@@ -708,16 +719,31 @@ bool ADS1232_ADC::getSignalTimeoutFlag() {
 // ---------------------------------------------------------------------------
 
 float ADS1232_ADC::getConversionTime() {
-    return _conversionTimeMicros / 1000.0f;
+    unsigned long conversionTimeMicros = _conversionTimeMicros;
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        conversionTimeMicros = _conversionTimeMicros;
+        xSemaphoreGive(_mutex);
+    }
+
+    return conversionTimeMicros / 1000.0f;
 }
 
 float ADS1232_ADC::getSPS() {
-    if (_conversionTimeMicros == 0) return 0.0f;
-    return 1000000.0f / _conversionTimeMicros;
+    unsigned long conversionTimeMicros = _conversionTimeMicros;
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        conversionTimeMicros = _conversionTimeMicros;
+        xSemaphoreGive(_mutex);
+    }
+
+    if (conversionTimeMicros == 0) return 0.0f;
+    return 1000000.0f / conversionTimeMicros;
 }
 
 float ADS1232_ADC::getSettlingTime() {
-    return getConversionTime() * _samplesInUse;
+    int samplesInUse = getSamplesInUse();
+    return getConversionTime() * samplesInUse;
 }
 
 // ---------------------------------------------------------------------------
@@ -749,5 +775,20 @@ void ADS1232_ADC::setTareOffset(long newoffset) {
 // ---------------------------------------------------------------------------
 
 void ADS1232_ADC::setReverseOutput() {
-    _reverseVal = true;
+    setReverseOutput(true);
+}
+
+void ADS1232_ADC::setReverseOutput(bool enabled) {
+    if (!_ensureMutex()) {
+        _reverseVal = enabled;
+        return;
+    }
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        if (_reverseVal != enabled) {
+            _reverseVal = enabled;
+            _resetSampleStateLocked(true);
+        }
+        xSemaphoreGive(_mutex);
+    }
 }

@@ -62,12 +62,15 @@ class LifecycleThreadSafetyTests(unittest.TestCase):
     def test_public_state_accessors_use_mutex(self):
         methods = [
             "getCalFactor",
+            "getSamplesInUse",
             "getTareStatus",
             "setDebugCallback",
             "setDebugEnabled",
             "getDebugEnabled",
             "setSignalTimeoutMs",
             "getSignalTimeoutFlag",
+            "getConversionTime",
+            "getSPS",
             "getTareOffset",
             "setTareOffset",
         ]
@@ -99,6 +102,17 @@ class LifecycleThreadSafetyTests(unittest.TestCase):
         self.assertIn("if (callback != nullptr)", body)
         self.assertIn("callback(info);", body)
         self.assertNotIn("_debugCallback(info);", body)
+
+
+    def test_reverse_output_bool_api_resets_sample_and_tare_state(self):
+        header = normalized(HEADER.read_text(encoding="utf-8"))
+        source = normalized(SOURCE.read_text(encoding="utf-8"))
+
+        self.assertIn("void setReverseOutput(bool enabled);", header)
+        self.assertIn("void ADS1232_ADC::setReverseOutput() { setReverseOutput(true); }", source)
+        self.assertIn("void ADS1232_ADC::setReverseOutput(bool enabled)", source)
+        self.assertIn("_resetSampleStateLocked(true);", source)
+        self.assertIn("_tareOffset = 0;", normalized(method_body("_resetSampleStateLocked")))
 
 
 if __name__ == "__main__":

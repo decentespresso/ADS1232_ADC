@@ -98,6 +98,7 @@ public:
 
     // Output control
     void setReverseOutput();                        // Flip sign of all output values
+    void setReverseOutput(bool enabled);             // Enable or disable reversed output
 
 private:
     // Hardware Pins
@@ -135,6 +136,7 @@ private:
     volatile unsigned long _lastConvMicros = 0;        // micros() of previous conversion; 0 = no prior sample
     volatile unsigned long _lastDoutLowMillis = 0;
     volatile bool _signalTimeoutFlag = false;
+    bool _lastDataOutOfRange = false;
     uint32_t _signalTimeoutMs = DEFAULT_SIGNAL_TIMEOUT_MS;
     bool _reverseVal = false;
 
@@ -144,7 +146,7 @@ private:
     bool _readADCRaw();                             // The bit-banging ADC reader
     void _resetSampleStateLocked(bool resetTareOffset);
     unsigned long _refreshTimeoutForCount(int targetCount);
-    void _updateBuffer(long newValue);              // Updates the running sum and buffer
+    void _updateBuffer(long newValue, bool dataOutOfRange);              // Updates the running sum and buffer
     ADS1232DebugInfo _captureDebugInfoLocked();     // Snapshot under mutex
 };
 

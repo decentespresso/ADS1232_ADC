@@ -61,7 +61,7 @@ class ADS1232ProtocolTests(unittest.TestCase):
 
         self.assertIn("SemaphoreHandle_t _ioMutex = NULL;", header)
         self.assertLess(read_body.index("xSemaphoreTake(_ioMutex, (TickType_t)10)"), read_body.index("unsigned long now = micros();"))
-        self.assertLess(read_body.index("_updateBuffer((long)data);"), read_body.rindex("xSemaphoreGive(_ioMutex);"))
+        self.assertLess(read_body.index("_updateBuffer((long)data, dataOutOfRange);"), read_body.rindex("xSemaphoreGive(_ioMutex);"))
         self.assertLess(channel_body.index("xSemaphoreTake(_ioMutex, (TickType_t)10)"), channel_body.index("digitalWrite(_a0, channel ? HIGH : LOW);"))
         self.assertLess(channel_body.index("_signalTimeoutFlag = false;"), channel_body.rindex("xSemaphoreGive(_ioMutex);"))
 
@@ -104,6 +104,17 @@ class ADS1232ProtocolTests(unittest.TestCase):
         self.assertIn("ADS1232_DEFAULT_CONVERSION_MS", helper_body)
         self.assertIn("ADS1232_REFRESH_TIMEOUT_MARGIN_MS", helper_body)
         self.assertNotIn("+ 5000", refresh_body)
+
+
+    def test_data_out_of_range_tracks_adc_saturation_codes(self):
+        read_body = normalized(method_body("_readADCRaw"))
+        update_body = normalized(method_body("_updateBuffer"))
+        debug_body = normalized(method_body("_captureDebugInfoLocked"))
+
+        self.assertIn("bool dataOutOfRange = (data == 0x7FFFFF || data == 0x800000);", read_body)
+        self.assertIn("_lastDataOutOfRange = dataOutOfRange;", update_body)
+        self.assertIn("info.dataOutOfRange = _lastDataOutOfRange;", debug_body)
+        self.assertNotIn("_lastRawValue > 0xFFFFFF", debug_body)
 
     def test_unused_channel_pin_returns_minus_one(self):
         body = normalized(method_body("getChannelInUse"))
