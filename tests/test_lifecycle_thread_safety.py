@@ -45,6 +45,20 @@ class LifecycleThreadSafetyTests(unittest.TestCase):
         self.assertIn("_ioMutex = xSemaphoreCreateMutex();", body)
         self.assertIn("return _mutex != NULL && _ioMutex != NULL;", body)
 
+
+    def test_end_waits_for_task_ack_before_deleting_mutexes(self):
+        header = normalized(HEADER.read_text(encoding="utf-8"))
+        body = normalized(method_body("end"))
+        task_body = normalized(method_body("_samplingTask"))
+
+        self.assertIn("SemaphoreHandle_t _taskStopped = NULL;", header)
+        self.assertIn("xTaskNotifyGive(_taskHandle);", body)
+        self.assertIn("xSemaphoreTake(_taskStopped, stopTimeout) == pdTRUE", body)
+        self.assertLess(body.index("xSemaphoreTake(_taskStopped, stopTimeout)"), body.index("vTaskDelete(_taskHandle);"))
+        self.assertLess(body.index("vTaskDelete(_taskHandle);"), body.index("vSemaphoreDelete(_mutex);"))
+        self.assertIn("xSemaphoreGive(_taskStopped);", task_body)
+        self.assertIn("ulTaskNotifyTake(pdTRUE, delayTicks);", task_body)
+
     def test_public_state_accessors_use_mutex(self):
         methods = [
             "getCalFactor",

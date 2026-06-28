@@ -27,6 +27,10 @@ def method_body(name):
     raise AssertionError(f"method body not found: {name}")
 
 
+def normalized(text):
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def calls(body):
     return [
         (match.group(1), re.sub(r"\s+", " ", match.group(2)).strip())
@@ -74,14 +78,20 @@ class DefaultStartupTests(unittest.TestCase):
 
         self.assertIn("_signalTimeoutFlag = true;", body)
 
-    def test_begin_task_handles_creation_failure(self):
-        body = method_body("beginTask")
+    def test_begin_task_clamps_interval_and_handles_creation_failure(self):
+        body = normalized(method_body("beginTask"))
 
-        self.assertIn("BaseType_t taskStatus = xTaskCreatePinnedToCore", body)
-        self.assertRegex(
+        self.assertIn(
+            "_taskIntervalMs = intervalMs < ADS1232_MIN_TASK_INTERVAL_MS ? ADS1232_MIN_TASK_INTERVAL_MS : intervalMs;",
             body,
-            r"if \(taskStatus == pdPASS\) \{[^}]*_taskRunning = true;[^}]*\} else \{[^}]*_taskHandle = NULL;[^}]*_taskRunning = false;",
         )
+        self.assertIn("BaseType_t taskStatus = xTaskCreate(", body)
+        self.assertNotIn("xTaskCreatePinnedToCore", body)
+        self.assertLess(body.index("_taskRunning = true;"), body.index("BaseType_t taskStatus = xTaskCreate("))
+        self.assertNotIn("instance->_taskRunning = true;", body)
+        self.assertIn("if (taskStatus != pdPASS)", body)
+        self.assertIn("_taskRunning = false;", body)
+        self.assertIn("vSemaphoreDelete(_taskStopped);", body)
 
     def test_polling_update_maintains_signal_timeout(self):
         body = method_body("update")

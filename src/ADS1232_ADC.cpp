@@ -90,29 +90,35 @@ void ADS1232_ADC::beginTask(uint32_t intervalMs) {
         return;
     }
 
-    _taskIntervalMs = intervalMs;  // Store the interval for the task to use
-    _lastDoutLowMillis = millis();  // Reset timeout on start
+    if (_taskStopped != NULL) {
+        vSemaphoreDelete(_taskStopped);
+        _taskStopped = NULL;
+    }
 
-    // Create the FreeRTOS task
-    BaseType_t taskStatus = xTaskCreatePinnedToCore(
+    _taskIntervalMs = intervalMs < ADS1232_MIN_TASK_INTERVAL_MS ? ADS1232_MIN_TASK_INTERVAL_MS : intervalMs;
+    _lastDoutLowMillis = millis();
+    _taskStopped = xSemaphoreCreateBinary();
+    if (_taskStopped == NULL) return;
+
+    _taskRunning = true;
+
+    BaseType_t taskStatus = xTaskCreate(
         [](void* pvParameters) {
             ADS1232_ADC* instance = static_cast<ADS1232_ADC*>(pvParameters);
-            instance->_taskRunning = true;
             instance->_samplingTask(NULL);
         },
         "ADS1232_Task",
-        4096,               // Stack size
-        this,               // Pass 'this' pointer as parameter
-        2,                  // Priority
-        &_taskHandle,       // Task handle
-        1                   // Core 1 (keep UI on core 0)
+        4096,
+        this,
+        2,
+        &_taskHandle
     );
 
-    if (taskStatus == pdPASS) {
-        _taskRunning = true;
-    } else {
+    if (taskStatus != pdPASS) {
         _taskHandle = NULL;
         _taskRunning = false;
+        vSemaphoreDelete(_taskStopped);
+        _taskStopped = NULL;
     }
 }
 
@@ -120,24 +126,35 @@ void ADS1232_ADC::beginTask(uint32_t intervalMs) {
 // Lifecycle: end() - Stops the task and cleans up resources
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::end() {
-    // Signal the task to stop gracefully
     _taskRunning = false;
 
     if (_taskHandle != NULL) {
-        // Give the task time to stop
-        vTaskDelay(pdMS_TO_TICKS(50));
-        vTaskDelete(_taskHandle);
-        _taskHandle = NULL;
+        xTaskNotifyGive(_taskHandle);
+        TickType_t stopTimeout = pdMS_TO_TICKS(_taskIntervalMs + 100);
+        if (stopTimeout < pdMS_TO_TICKS(100)) {
+            stopTimeout = pdMS_TO_TICKS(100);
+        }
+        if (_taskStopped != NULL && xSemaphoreTake(_taskStopped, stopTimeout) == pdTRUE) {
+            vTaskDelete(_taskHandle);
+            _taskHandle = NULL;
+        }
     }
 
-    if (_mutex != NULL) {
-        vSemaphoreDelete(_mutex);
-        _mutex = NULL;
-    }
+    if (_taskHandle == NULL) {
+        if (_taskStopped != NULL) {
+            vSemaphoreDelete(_taskStopped);
+            _taskStopped = NULL;
+        }
 
-    if (_ioMutex != NULL) {
-        vSemaphoreDelete(_ioMutex);
-        _ioMutex = NULL;
+        if (_mutex != NULL) {
+            vSemaphoreDelete(_mutex);
+            _mutex = NULL;
+        }
+
+        if (_ioMutex != NULL) {
+            vSemaphoreDelete(_ioMutex);
+            _ioMutex = NULL;
+        }
     }
 }
 
@@ -167,28 +184,30 @@ void ADS1232_ADC::start(unsigned long t, bool dotare) {
 // Internal: _samplingTask() - The FreeRTOS background task
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::_samplingTask(void* pvParameters) {
-    TickType_t lastWakeTime;
-    lastWakeTime = xTaskGetTickCount();
+    TickType_t delayTicks = pdMS_TO_TICKS(_taskIntervalMs);
+    if (delayTicks < 1) {
+        delayTicks = 1;
+    }
 
     while (_taskRunning) {
-        // Wait for the next interval using stored interval
-        vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(_taskIntervalMs));
+        ulTaskNotifyTake(pdTRUE, delayTicks);
+        if (!_taskRunning) break;
 
         // Check if DOUT is LOW (data ready)
         if (digitalRead(_dout) == LOW && _readADCRaw()) {
             _lastDoutLowMillis = millis();
             _signalTimeoutFlag = false;
         } else {
-            // Signal timeout check — ADC hasn't produced a result
+            // Signal timeout check - ADC hasn't produced a result
             if (millis() - _lastDoutLowMillis > _signalTimeoutMs) {
                 _signalTimeoutFlag = true;
             }
         }
     }
 
-    // Suspend ourselves; end() will call vTaskDelete() on our handle.
-    // A FreeRTOS task must never return, and self-deleting here would
-    // race with vTaskDelete() in end().
+    if (_taskStopped != NULL) {
+        xSemaphoreGive(_taskStopped);
+    }
     vTaskSuspend(NULL);
 }
 

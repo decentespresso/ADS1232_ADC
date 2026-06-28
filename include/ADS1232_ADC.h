@@ -18,6 +18,7 @@
 #define MAX_SAMPLES 64
 #define ADS1232_BUFFER_SIZE 256
 #define DEFAULT_SIGNAL_TIMEOUT_MS 300
+#define ADS1232_MIN_TASK_INTERVAL_MS 1
 
 // Debug info structure — lightweight snapshot, no statistics precomputed.
 struct ADS1232DebugInfo {
@@ -111,6 +112,7 @@ private:
     TaskHandle_t _taskHandle = NULL;
     SemaphoreHandle_t _mutex = NULL;
     SemaphoreHandle_t _ioMutex = NULL;
+    SemaphoreHandle_t _taskStopped = NULL;
     volatile bool _taskRunning = false;  // Flag to signal task to stop
 
     // Data Storage
