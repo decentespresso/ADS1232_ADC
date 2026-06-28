@@ -21,6 +21,7 @@
 #define ADS1232_MIN_TASK_INTERVAL_MS 1
 #define ADS1232_DEFAULT_CONVERSION_MS 100
 #define ADS1232_REFRESH_TIMEOUT_MARGIN_MS 1000
+#define ADS1232_MIN_CALIBRATION_VALUE 1.0f
 
 // Debug info structure — lightweight snapshot, no statistics precomputed.
 struct ADS1232DebugInfo {

@@ -486,7 +486,7 @@ void ADS1232_ADC::setGain(uint8_t gain) {
 // setCalFactor() & getCalFactor()
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::setCalFactor(float cal) {
-    if (cal == 0.0f || !isfinite(cal)) {
+    if (cal <= 0.0f || !isfinite(cal)) {
         return;
     }
 
@@ -653,10 +653,11 @@ bool ADS1232_ADC::refreshDataSet() {
 float ADS1232_ADC::getNewCalibration(float known_mass) {
     float currentValue = getData();
     float calFactor = getCalFactor();
-    if (known_mass == 0) return calFactor;
+    if (known_mass <= 0.0f || !isfinite(known_mass)) return calFactor;
+    if (fabsf(currentValue) < ADS1232_MIN_CALIBRATION_VALUE) return calFactor;
 
     float newCalFactor = (currentValue * calFactor) / known_mass;
-    if (newCalFactor == 0.0f || !isfinite(newCalFactor)) return calFactor;
+    if (newCalFactor <= 0.0f || !isfinite(newCalFactor)) return calFactor;
     setCalFactor(newCalFactor);
     return newCalFactor;
 }

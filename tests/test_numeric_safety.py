@@ -53,11 +53,10 @@ class NumericSafetyTests(unittest.TestCase):
         set_cal_body = normalized(method_body("setCalFactor"))
         new_cal_body = normalized(method_body("getNewCalibration"))
 
-        self.assertIn("if (cal == 0.0f || !isfinite(cal)) { return; }", set_cal_body)
-        self.assertIn(
-            "if (newCalFactor == 0.0f || !isfinite(newCalFactor)) return calFactor;",
-            new_cal_body,
-        )
+        self.assertIn("if (cal <= 0.0f || !isfinite(cal)) { return; }", set_cal_body)
+        self.assertIn("if (known_mass <= 0.0f || !isfinite(known_mass)) return calFactor;", new_cal_body)
+        self.assertIn("if (fabsf(currentValue) < ADS1232_MIN_CALIBRATION_VALUE) return calFactor;", new_cal_body)
+        self.assertIn("if (newCalFactor <= 0.0f || !isfinite(newCalFactor)) return calFactor;", new_cal_body)
 
     def test_debug_snapshots_are_zero_initialized(self):
         source = SOURCE.read_text(encoding="utf-8")
