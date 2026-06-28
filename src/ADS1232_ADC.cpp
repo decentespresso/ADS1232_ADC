@@ -46,6 +46,18 @@ bool ADS1232_ADC::_ensureMutex() {
     return _mutex != NULL && _ioMutex != NULL;
 }
 
+void ADS1232_ADC::_resetSampleStateLocked(bool resetTareOffset) {
+    for (int i = 0; i < ADS1232_BUFFER_SIZE; i++) {
+        _dataBuffer[i] = 0;
+    }
+    _bufferIdx = 0;
+    _validSamples = 0;
+    _tareComplete = false;
+    if (resetTareOffset) {
+        _tareOffset = 0;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Lifecycle: begin()
 // ---------------------------------------------------------------------------
@@ -425,12 +437,20 @@ float ADS1232_ADC::getCalFactor() {
 // Power Control
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::powerDown() {
+    if (!_ensureMutex()) return;
+    if (_ioMutex == NULL || xSemaphoreTake(_ioMutex, (TickType_t)10) != pdTRUE) return;
+
     digitalWrite(_pdwn, LOW);
     delayMicroseconds(1);
     digitalWrite(_sck, HIGH);
+
+    xSemaphoreGive(_ioMutex);
 }
 
 void ADS1232_ADC::powerUp() {
+    if (!_ensureMutex()) return;
+    if (_ioMutex == NULL || xSemaphoreTake(_ioMutex, (TickType_t)10) != pdTRUE) return;
+
     digitalWrite(_sck, LOW);
     digitalWrite(_pdwn, LOW);
     delayMicroseconds(10);
@@ -439,9 +459,16 @@ void ADS1232_ADC::powerUp() {
     digitalWrite(_pdwn, LOW);
     delayMicroseconds(26);
     digitalWrite(_pdwn, HIGH);
-    _lastConvMicros = 0;  // discard the power-down gap from the next SPS interval
-    _lastDoutLowMillis = millis();
-    _signalTimeoutFlag = false;
+
+    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        _lastConvMicros = 0;
+        _lastDoutLowMillis = millis();
+        _signalTimeoutFlag = false;
+        _resetSampleStateLocked(false);
+        xSemaphoreGive(_mutex);
+    }
+
+    xSemaphoreGive(_ioMutex);
 }
 
 // ---------------------------------------------------------------------------
@@ -449,21 +476,21 @@ void ADS1232_ADC::powerUp() {
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::setChannelInUse(int channel) {
     if (_a0 == 255) return;
+    if (!_ensureMutex()) return;
     if (_ioMutex == NULL || xSemaphoreTake(_ioMutex, (TickType_t)10) != pdTRUE) return;
 
-    digitalWrite(_a0, channel ? HIGH : LOW);
-
-    if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
-        for (int i = 0; i < ADS1232_BUFFER_SIZE; i++) {
-            _dataBuffer[i] = 0;
-        }
-        _bufferIdx = 0;
-        _validSamples = 0;
-        xSemaphoreGive(_mutex);
+    if (_mutex == NULL || xSemaphoreTake(_mutex, (TickType_t)10) != pdTRUE) {
+        xSemaphoreGive(_ioMutex);
+        return;
     }
 
+    digitalWrite(_a0, channel ? HIGH : LOW);
+    _resetSampleStateLocked(false);
+    _lastConvMicros = 0;
     _lastDoutLowMillis = millis();
     _signalTimeoutFlag = false;
+
+    xSemaphoreGive(_mutex);
     xSemaphoreGive(_ioMutex);
 }
 
@@ -484,11 +511,7 @@ void ADS1232_ADC::setSamplesInUse(int samples) {
     if (samples > 0 && samples <= _maxSamples) {
         if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
             _samplesInUse = samples;
-            for (int i = 0; i < ADS1232_BUFFER_SIZE; i++) {
-                _dataBuffer[i] = 0;
-            }
-            _bufferIdx = 0;
-            _validSamples = 0;
+            _resetSampleStateLocked(false);
             xSemaphoreGive(_mutex);
         }
     }

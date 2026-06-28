@@ -46,10 +46,11 @@ class ADS1232ProtocolTests(unittest.TestCase):
     def test_channel_change_resets_sample_state(self):
         body = normalized(method_body("setChannelInUse"))
 
-        self.assertIn("if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE)", body)
-        self.assertIn("for (int i = 0; i < ADS1232_BUFFER_SIZE; i++) { _dataBuffer[i] = 0; }", body)
-        self.assertIn("_bufferIdx = 0;", body)
-        self.assertIn("_validSamples = 0;", body)
+        self.assertIn("if (!_ensureMutex()) return;", body)
+        self.assertIn("if (_mutex == NULL || xSemaphoreTake(_mutex, (TickType_t)10) != pdTRUE)", body)
+        self.assertLess(body.index("xSemaphoreTake(_mutex"), body.index("digitalWrite(_a0, channel ? HIGH : LOW);"))
+        self.assertIn("_resetSampleStateLocked(false);", body)
+        self.assertIn("_lastConvMicros = 0;", body)
         self.assertIn("_lastDoutLowMillis = millis();", body)
         self.assertIn("_signalTimeoutFlag = false;", body)
 
@@ -63,6 +64,17 @@ class ADS1232ProtocolTests(unittest.TestCase):
         self.assertLess(read_body.index("_updateBuffer((long)data);"), read_body.rindex("xSemaphoreGive(_ioMutex);"))
         self.assertLess(channel_body.index("xSemaphoreTake(_ioMutex, (TickType_t)10)"), channel_body.index("digitalWrite(_a0, channel ? HIGH : LOW);"))
         self.assertLess(channel_body.index("_signalTimeoutFlag = false;"), channel_body.rindex("xSemaphoreGive(_ioMutex);"))
+
+
+    def test_power_operations_share_io_lock_with_reads(self):
+        power_down = normalized(method_body("powerDown"))
+        power_up = normalized(method_body("powerUp"))
+
+        self.assertLess(power_down.index("xSemaphoreTake(_ioMutex, (TickType_t)10)"), power_down.index("digitalWrite(_pdwn, LOW);"))
+        self.assertLess(power_down.index("digitalWrite(_sck, HIGH);"), power_down.rindex("xSemaphoreGive(_ioMutex);"))
+        self.assertLess(power_up.index("xSemaphoreTake(_ioMutex, (TickType_t)10)"), power_up.index("digitalWrite(_sck, LOW);"))
+        self.assertIn("_resetSampleStateLocked(false);", power_up)
+        self.assertLess(power_up.index("_resetSampleStateLocked(false);"), power_up.rindex("xSemaphoreGive(_ioMutex);"))
 
     def test_callers_only_report_reads_after_io_lock_success(self):
         task_body = normalized(method_body("_samplingTask"))

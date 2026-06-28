@@ -140,6 +140,7 @@ private:
     bool _ensureMutex();
     void _samplingTask(void* pvParameters);         // The FreeRTOS task function
     bool _readADCRaw();                             // The bit-banging ADC reader
+    void _resetSampleStateLocked(bool resetTareOffset);
     void _updateBuffer(long newValue);              // Updates the running sum and buffer
     ADS1232DebugInfo _captureDebugInfoLocked();     // Snapshot under mutex
 };
