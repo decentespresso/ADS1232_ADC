@@ -63,6 +63,8 @@ public:
     float getData();                                // Thread-safe: returns smoothed weight
     void tare();                                    // Blocking tare
     void tareNoDelay();                             // Non-blocking tare
+    void tareFresh();                               // Blocking tare using fresh samples
+    void tareFreshNoDelay();                        // Non-blocking tare using fresh samples
     bool getTareStatus();                           // Check if tare-in-progress is complete
 
     // Sampling control
@@ -123,6 +125,8 @@ private:
     float _calFactorRecip = 1.0;
     float _tareOffset = 0;
     volatile bool _tareComplete = false;            // One-shot flag: true after tare, cleared on read
+    bool _tareFreshPending = false;
+    int _tareFreshSamplesNeeded = 0;
     long _dataBuffer[ADS1232_BUFFER_SIZE];
     int _bufferIdx = 0;
     int _samplesInUse = 0;
@@ -145,6 +149,7 @@ private:
     void _samplingTask(void* pvParameters);         // The FreeRTOS task function
     bool _readADCRaw();                             // The bit-banging ADC reader
     void _resetSampleStateLocked(bool resetTareOffset);
+    void _commitFreshTareIfReadyLocked();
     unsigned long _refreshTimeoutForCount(int targetCount);
     void _updateBuffer(long newValue, bool dataOutOfRange);              // Updates the running sum and buffer
     ADS1232DebugInfo _captureDebugInfoLocked();     // Snapshot under mutex

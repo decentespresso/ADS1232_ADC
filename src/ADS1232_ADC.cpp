@@ -53,12 +53,31 @@ void ADS1232_ADC::_resetSampleStateLocked(bool resetTareOffset) {
     _bufferIdx = 0;
     _validSamples = 0;
     _tareComplete = false;
+    _tareFreshPending = false;
+    _tareFreshSamplesNeeded = 0;
     _lastDataOutOfRange = false;
     if (resetTareOffset) {
         _tareOffset = 0;
     }
 }
 
+
+void ADS1232_ADC::_commitFreshTareIfReadyLocked() {
+    if (!_tareFreshPending || _validSamples < _tareFreshSamplesNeeded) return;
+
+    int64_t sum = 0;
+    int count = _validSamples;
+    for (int i = 0; i < count; i++) {
+        sum += _dataBuffer[i];
+    }
+
+    if (count > 0) {
+        _tareOffset = (float)sum / count;
+        _tareFreshPending = false;
+        _tareFreshSamplesNeeded = 0;
+        _tareComplete = true;
+    }
+}
 
 unsigned long ADS1232_ADC::_refreshTimeoutForCount(int targetCount) {
     unsigned long conversionTimeMs = ADS1232_DEFAULT_CONVERSION_MS;
@@ -302,6 +321,7 @@ void ADS1232_ADC::_updateBuffer(long newValue, bool dataOutOfRange) {
             if (_validSamples < _samplesInUse) _validSamples++;
             _lastRawValue = newValue;
             _lastDataOutOfRange = dataOutOfRange;
+            _commitFreshTareIfReadyLocked();
 
             // Capture debug snapshot under mutex, fire callback after release
             if (_debugEnabled && _debugCallback != nullptr) {
@@ -398,6 +418,42 @@ void ADS1232_ADC::tareNoDelay() {
             _tareComplete = true;
         }
 
+        xSemaphoreGive(_mutex);
+    }
+}
+
+void ADS1232_ADC::tareFresh() {
+    tareFreshNoDelay();
+
+    unsigned long startedAt = millis();
+    unsigned long timeoutMs = _refreshTimeoutForCount(getSamplesInUse());
+    while (!getTareStatus()) {
+        if (!_taskRunning) {
+            update();
+        }
+        if (millis() - startedAt > timeoutMs) {
+            if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+                _tareFreshPending = false;
+                _tareFreshSamplesNeeded = 0;
+                _signalTimeoutFlag = true;
+                xSemaphoreGive(_mutex);
+            } else {
+                _signalTimeoutFlag = true;
+            }
+            break;
+        }
+        delay(10);
+        yield();
+    }
+}
+
+void ADS1232_ADC::tareFreshNoDelay() {
+    if (_mutex == NULL) return;
+
+    if (xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
+        _resetSampleStateLocked(false);
+        _tareFreshPending = true;
+        _tareFreshSamplesNeeded = _samplesInUse > 0 ? _samplesInUse : 1;
         xSemaphoreGive(_mutex);
     }
 }

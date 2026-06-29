@@ -73,6 +73,27 @@ class DefaultStartupTests(unittest.TestCase):
             r"if \(count > 0\) \{[^}]*_tareOffset = \(float\)sum / count;[^}]*_tareComplete = true;",
         )
 
+
+    def test_tare_fresh_no_delay_collects_fresh_samples_before_completion(self):
+        body = normalized(method_body("tareFreshNoDelay"))
+        update_body = normalized(method_body("_updateBuffer"))
+        commit_body = normalized(method_body("_commitFreshTareIfReadyLocked"))
+
+        self.assertIn("_resetSampleStateLocked(false);", body)
+        self.assertIn("_tareFreshPending = true;", body)
+        self.assertIn("_tareFreshSamplesNeeded = _samplesInUse > 0 ? _samplesInUse : 1;", body)
+        self.assertNotIn("_tareComplete = true;", body)
+        self.assertIn("_commitFreshTareIfReadyLocked();", update_body)
+        self.assertIn("_tareOffset = (float)sum / count;", commit_body)
+        self.assertIn("_tareComplete = true;", commit_body)
+
+    def test_tare_fresh_timeout_marks_signal_timeout(self):
+        body = normalized(method_body("tareFresh"))
+
+        self.assertIn("unsigned long timeoutMs = _refreshTimeoutForCount(getSamplesInUse());", body)
+        self.assertIn("if (!_taskRunning) { update(); }", body)
+        self.assertIn("_signalTimeoutFlag = true;", body)
+
     def test_tare_timeout_marks_signal_timeout(self):
         body = method_body("tare")
 

@@ -115,5 +115,15 @@ class LifecycleThreadSafetyTests(unittest.TestCase):
         self.assertIn("_tareOffset = 0;", normalized(method_body("_resetSampleStateLocked")))
 
 
+    def test_fresh_tare_api_is_added_without_changing_tare_no_delay(self):
+        header = normalized(HEADER.read_text(encoding="utf-8"))
+        tare_body = normalized(method_body("tareNoDelay"))
+
+        self.assertIn("void tareFresh();", header)
+        self.assertIn("void tareFreshNoDelay();", header)
+        self.assertIn("if (count > 0) { _tareOffset = (float)sum / count; _tareComplete = true; }", tare_body)
+        self.assertNotIn("_resetSampleStateLocked(false);", tare_body)
+
+
 if __name__ == "__main__":
     unittest.main()
