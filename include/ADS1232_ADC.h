@@ -17,12 +17,16 @@
 // Default max samples constant for compatibility
 #define MAX_SAMPLES 64
 #define ADS1232_BUFFER_SIZE 256
-#define DEFAULT_SIGNAL_TIMEOUT_MS 100
+#define DEFAULT_SIGNAL_TIMEOUT_MS 300
+#define ADS1232_MIN_TASK_INTERVAL_MS 1
+#define ADS1232_DEFAULT_CONVERSION_MS 100
+#define ADS1232_REFRESH_TIMEOUT_MARGIN_MS 1000
+#define ADS1232_MIN_CALIBRATION_VALUE 1.0f
 
 // Debug info structure — lightweight snapshot, no statistics precomputed.
 struct ADS1232DebugInfo {
     unsigned long timestamp;        // millis() when debug info was captured
-    long rawValue;                  // Latest raw 24-bit value read (after reverse)
+    long rawValue;                  // Latest signed 24-bit value read (after reverse)
     long smoothedValue;             // Smoothed value after filtering
     long tareOffset;                // Current tare offset
     float conversionTimeMs;         // Latest conversion time in ms
@@ -60,6 +64,8 @@ public:
     float getData();                                // Thread-safe: returns smoothed weight
     void tare();                                    // Blocking tare
     void tareNoDelay();                             // Non-blocking tare
+    void tareFresh();                               // Blocking tare using fresh samples
+    void tareFreshNoDelay();                        // Non-blocking tare using fresh samples
     bool getTareStatus();                           // Check if tare-in-progress is complete
 
     // Sampling control
@@ -81,7 +87,7 @@ public:
     void setDebugEnabled(bool enabled);             // Enable/disable debug callbacks
     bool getDebugEnabled();                         // Check if debug is enabled
     ADS1232DebugInfo getDebugInfo();                // Snapshot of current state
-    void setSignalTimeoutMs(uint32_t ms);           // Override DOUT timeout (default 100ms)
+    void setSignalTimeoutMs(uint32_t ms);           // Override DOUT timeout (default 300ms)
     bool getSignalTimeoutFlag();                    // True if DOUT inactive > timeout
 
     // Conversion timing diagnostics
@@ -95,6 +101,7 @@ public:
 
     // Output control
     void setReverseOutput();                        // Flip sign of all output values
+    void setReverseOutput(bool enabled);             // Enable or disable reversed output
 
 private:
     // Hardware Pins
@@ -110,6 +117,8 @@ private:
     // Threading & Sync
     TaskHandle_t _taskHandle = NULL;
     SemaphoreHandle_t _mutex = NULL;
+    SemaphoreHandle_t _ioMutex = NULL;
+    SemaphoreHandle_t _taskStopped = NULL;
     volatile bool _taskRunning = false;  // Flag to signal task to stop
 
     // Data Storage
@@ -117,6 +126,8 @@ private:
     float _calFactorRecip = 1.0;
     float _tareOffset = 0;
     volatile bool _tareComplete = false;            // One-shot flag: true after tare, cleared on read
+    bool _tareFreshPending = false;
+    int _tareFreshSamplesNeeded = 0;
     long _dataBuffer[ADS1232_BUFFER_SIZE];
     int _bufferIdx = 0;
     int _samplesInUse = 0;
@@ -130,13 +141,18 @@ private:
     volatile unsigned long _lastConvMicros = 0;        // micros() of previous conversion; 0 = no prior sample
     volatile unsigned long _lastDoutLowMillis = 0;
     volatile bool _signalTimeoutFlag = false;
+    bool _lastDataOutOfRange = false;
     uint32_t _signalTimeoutMs = DEFAULT_SIGNAL_TIMEOUT_MS;
     bool _reverseVal = false;
 
     // Internal processing
+    bool _ensureMutex();
     void _samplingTask(void* pvParameters);         // The FreeRTOS task function
-    void _readADCRaw();                             // The bit-banging ADC reader
-    void _updateBuffer(long newValue);              // Updates the running sum and buffer
+    bool _readADCRaw();                             // The bit-banging ADC reader
+    void _resetSampleStateLocked(bool resetTareOffset);
+    void _commitFreshTareIfReadyLocked();
+    unsigned long _refreshTimeoutForCount(int targetCount);
+    void _updateBuffer(long newValue, bool dataOutOfRange);              // Updates the running sum and buffer
     ADS1232DebugInfo _captureDebugInfoLocked();     // Snapshot under mutex
 };
 

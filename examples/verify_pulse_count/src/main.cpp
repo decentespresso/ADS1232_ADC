@@ -2,26 +2,13 @@
    ADS1232_ADC — Pulse Count Verification
    =======================================
 
-   The ADS1232 uses extra SCLK pulses (beyond the 24 data bits) to select
-   the input channel for the NEXT conversion:
+   The ADS1232 conversion read uses 24 SCLK pulses for data plus a 25th
+   SCLK pulse to force DRDY/DOUT high. Gain is set via the physical
+   GAIN0/GAIN1 pins, and channel selection is controlled by A0/TEMP.
 
-     Total pulses | Extra | Next channel
-     -------------|-------|-------------
-            25    |   1   | AINP1/AINN1  (channel 1)
-            26    |   2   | AINP2/AINN2  (channel 2)
-
-   This is different from the HX711, which uses extra pulses to set gain:
-
-     HX711 pulses | Extra | Gain | Channel
-     -------------|-------|------|--------
-            25    |   1   |  128 |    A
-            26    |   2   |   32 |    B
-            27    |   3   |   64 |    A
-
-   The original upstream code (from openscale, based on HX711_ADC) maps
-   user-facing "gain" values to SCLK pulse counts using the HX711 table.
-   On the ADS1232 these pulse counts still work — they just select the
-   channel, not the gain (gain is set via the physical GAIN0/GAIN1 pins).
+   The 26th SCLK pulse starts offset calibration, so extra pulses should
+   not be used as gain or channel controls. This is different from HX711
+   libraries that encode gain/channel choices as post-read pulse counts.
 
    This example verifies the pulse count for each gain setting by
    intercepting SCLK via a GPIO interrupt on a monitor pin. If no spare
@@ -101,9 +88,9 @@ void setup() {
     Serial.println("=== ADS1232 Pulse Count Verification ===");
     Serial.println();
     Serial.println("ADS1232 datasheet:");
-    Serial.println("  25 pulses -> next conversion on channel 1");
-    Serial.println("  26 pulses -> next conversion on channel 2");
-    Serial.println("  27 pulses -> no defined meaning");
+    Serial.println("  25 pulses -> complete read and force DRDY/DOUT high");
+    Serial.println("  26 pulses -> starts offset calibration");
+    Serial.println("  Gain is controlled by GAIN0/GAIN1 pins");
     Serial.println();
 
 #if USE_MONITOR_PIN
@@ -133,7 +120,7 @@ void setup() {
     for (int t = 0; t < NUM_TESTS; t++) {
         scale.setGain(tests[t].gain);
 
-        // Throwaway read — applies new gain for the NEXT conversion
+        // Throwaway read — exercises the selected compatibility setting
         if (waitForDataReady(500)) {
 #if USE_MONITOR_PIN
             pulseCount = 0;
