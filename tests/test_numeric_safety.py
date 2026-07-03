@@ -49,14 +49,16 @@ class NumericSafetyTests(unittest.TestCase):
         self.assertNotIn("long sum = 0;", source)
         self.assertEqual(4, source.count("int64_t sum = 0;"))
 
-    def test_invalid_calibration_factors_are_rejected(self):
+    def test_unsafe_calibration_factors_are_rejected_without_rejecting_sign(self):
         set_cal_body = normalized(method_body("setCalFactor"))
         new_cal_body = normalized(method_body("getNewCalibration"))
 
-        self.assertIn("if (cal <= 0.0f || !isfinite(cal)) { return; }", set_cal_body)
+        self.assertIn("if (!isfinite(cal) || fabsf(cal) < ADS1232_MIN_CALIBRATION_VALUE) { return; }", set_cal_body)
+        self.assertNotIn("cal <= 0.0f", set_cal_body)
         self.assertIn("if (known_mass <= 0.0f || !isfinite(known_mass)) return calFactor;", new_cal_body)
         self.assertIn("if (fabsf(currentValue) < ADS1232_MIN_CALIBRATION_VALUE) return calFactor;", new_cal_body)
-        self.assertIn("if (newCalFactor <= 0.0f || !isfinite(newCalFactor)) return calFactor;", new_cal_body)
+        self.assertIn("if (!isfinite(newCalFactor) || fabsf(newCalFactor) < ADS1232_MIN_CALIBRATION_VALUE) return calFactor;", new_cal_body)
+        self.assertNotIn("newCalFactor <= 0.0f", new_cal_body)
 
     def test_debug_snapshots_are_zero_initialized(self):
         source = SOURCE.read_text(encoding="utf-8")

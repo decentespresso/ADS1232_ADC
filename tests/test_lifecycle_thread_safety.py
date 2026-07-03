@@ -92,7 +92,8 @@ class LifecycleThreadSafetyTests(unittest.TestCase):
         self.assertIn("if (known_mass <= 0.0f || !isfinite(known_mass)) return calFactor;", body)
         self.assertIn("if (fabsf(currentValue) < ADS1232_MIN_CALIBRATION_VALUE) return calFactor;", body)
         self.assertIn("float newCalFactor = (currentValue * calFactor) / known_mass;", body)
-        self.assertIn("if (newCalFactor <= 0.0f || !isfinite(newCalFactor)) return calFactor;", body)
+        self.assertIn("if (!isfinite(newCalFactor) || fabsf(newCalFactor) < ADS1232_MIN_CALIBRATION_VALUE) return calFactor;", body)
+        self.assertNotIn("newCalFactor <= 0.0f", body)
         self.assertNotIn("_calFactor", body)
 
     def test_update_buffer_copies_debug_callback_before_invoking(self):
