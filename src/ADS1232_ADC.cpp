@@ -19,7 +19,6 @@ ADS1232_ADC::ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn, uint8_t a0,
     _maxSamples = samples < 1 ? 1 : (samples > ADS1232_BUFFER_SIZE ? ADS1232_BUFFER_SIZE : samples);
     _ignHigh = ignHigh;
     _ignLow = ignLow;
-    _gain = 128;
     _samplesInUse = _maxSamples;
     _validSamples = 0;
 
@@ -484,9 +483,7 @@ bool ADS1232_ADC::getTareStatus() {
 // ---------------------------------------------------------------------------
 // setGain()
 // ---------------------------------------------------------------------------
-void ADS1232_ADC::setGain(uint8_t gain) {
-    _gain = gain; // Hardware gain set via pins; this is for pulse count
-}
+void ADS1232_ADC::setGain(uint8_t) {}
 
 // ---------------------------------------------------------------------------
 // setCalFactor() & getCalFactor()

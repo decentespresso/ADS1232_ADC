@@ -57,14 +57,14 @@ public:
 
     // Lifecycle
     void begin();                                   // Initialize pins and power up
-    void begin(uint8_t gain);                       // Initialize with specific gain
+    void begin(uint8_t gain);                       // Compatibility overload; gain is hardware-controlled
     void beginTask(uint32_t intervalMs);             // Starts the background FreeRTOS sampling task
     void end();                                     // Stops task and cleans up resources
     void start(unsigned long t);                     // Start ADC and do tare
     void start(unsigned long t, bool dotare);        // Start ADC, tare if selected
 
     // Thread-Safe API
-    void setGain(uint8_t gain = 128);               // 32, 64, or 128
+    void setGain(uint8_t gain = 128);               // Compatibility no-op; gain is hardware-controlled
     void setCalFactor(float cal);                   // Set new calibration factor
     float getCalFactor();                           // Get current calibration factor
     float getData();                                // Thread-safe: returns smoothed weight
@@ -112,8 +112,6 @@ public:
 private:
     // Hardware Pins
     uint8_t _dout, _sck, _pdwn, _a0;
-    uint8_t _gain;
-
     // Configuration properties
     int _maxSamples;
     bool _ignHigh;

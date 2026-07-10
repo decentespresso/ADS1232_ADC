@@ -157,7 +157,7 @@ ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn,
 | Method | Description |
 |--------|-------------|
 | `begin()` | Initialize GPIO pins, power up the ADC |
-| `begin(uint8_t gain)` | Initialize with legacy pulse-count compatibility setting |
+| `begin(uint8_t gain)` | Compatibility overload; gain argument is ignored |
 | `start(unsigned long t)` | Stabilize for `t` ms + tare |
 | `start(unsigned long t, bool dotare)` | Stabilize, optionally tare |
 | `beginTask(uint32_t intervalMs)` | Start FreeRTOS background sampling task |
@@ -189,7 +189,7 @@ ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn,
 |--------|-------------|
 | `powerDown()` | Power down the ADC |
 | `powerUp()` | Power up the ADC |
-| `setGain(uint8_t gain)` | Legacy compatibility setting; ADS1232 gain is hardware-controlled |
+| `setGain(uint8_t gain)` | Compatibility no-op; ADS1232 gain is hardware-controlled |
 | `setChannelInUse(int channel)` | Select ADC channel (0 or 1) |
 | `getChannelInUse()` | Get current channel |
 | `setReverseOutput()` | Flip output sign (for inverted load-cell wiring) |

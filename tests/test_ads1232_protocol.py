@@ -42,6 +42,7 @@ class ADS1232ProtocolTests(unittest.TestCase):
         self.assertIn("for (uint8_t i = 0; i < 25; i++)", body)
         self.assertNotIn("_gain ==", body)
         self.assertIn("return updated;", body)
+        self.assertNotIn("uint8_t _gain;", header)
 
     def test_channel_change_resets_sample_state(self):
         body = normalized(method_body("setChannelInUse"))
