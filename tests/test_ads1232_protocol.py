@@ -41,13 +41,13 @@ class ADS1232ProtocolTests(unittest.TestCase):
         self.assertIn("return false;", body)
         self.assertIn("for (uint8_t i = 0; i < 25; i++)", body)
         self.assertNotIn("_gain ==", body)
-        self.assertIn("return true;", body)
+        self.assertIn("return updated;", body)
 
     def test_channel_change_resets_sample_state(self):
         body = normalized(method_body("setChannelInUse"))
 
         self.assertIn("if (!_ensureMutex()) return;", body)
-        self.assertIn("if (_mutex == NULL || xSemaphoreTake(_mutex, (TickType_t)10) != pdTRUE)", body)
+        self.assertIn("if (_mutex == NULL || xSemaphoreTake(_mutex, portMAX_DELAY) != pdTRUE)", body)
         self.assertLess(body.index("xSemaphoreTake(_mutex"), body.index("digitalWrite(_a0, channel ? HIGH : LOW);"))
         self.assertIn("_resetSampleStateLocked(false);", body)
         self.assertIn("_lastConvMicros = 0;", body)
@@ -60,9 +60,9 @@ class ADS1232ProtocolTests(unittest.TestCase):
         channel_body = normalized(method_body("setChannelInUse"))
 
         self.assertIn("SemaphoreHandle_t _ioMutex = NULL;", header)
-        self.assertLess(read_body.index("xSemaphoreTake(_ioMutex, (TickType_t)10)"), read_body.index("unsigned long now = micros();"))
-        self.assertLess(read_body.index("_updateBuffer((long)signedData, dataOutOfRange);"), read_body.rindex("xSemaphoreGive(_ioMutex);"))
-        self.assertLess(channel_body.index("xSemaphoreTake(_ioMutex, (TickType_t)10)"), channel_body.index("digitalWrite(_a0, channel ? HIGH : LOW);"))
+        self.assertLess(read_body.index("xSemaphoreTake(_ioMutex, portMAX_DELAY)"), read_body.index("unsigned long now = micros();"))
+        self.assertLess(read_body.index("_updateBuffer((long)signedData, dataOutOfRange, now)"), read_body.rindex("xSemaphoreGive(_ioMutex);"))
+        self.assertLess(channel_body.index("xSemaphoreTake(_ioMutex, portMAX_DELAY)"), channel_body.index("digitalWrite(_a0, channel ? HIGH : LOW);"))
         self.assertLess(channel_body.index("_signalTimeoutFlag = false;"), channel_body.rindex("xSemaphoreGive(_ioMutex);"))
 
 
@@ -70,9 +70,9 @@ class ADS1232ProtocolTests(unittest.TestCase):
         power_down = normalized(method_body("powerDown"))
         power_up = normalized(method_body("powerUp"))
 
-        self.assertLess(power_down.index("xSemaphoreTake(_ioMutex, (TickType_t)10)"), power_down.index("digitalWrite(_pdwn, LOW);"))
+        self.assertLess(power_down.index("xSemaphoreTake(_ioMutex, portMAX_DELAY)"), power_down.index("digitalWrite(_pdwn, LOW);"))
         self.assertLess(power_down.index("digitalWrite(_sck, HIGH);"), power_down.rindex("xSemaphoreGive(_ioMutex);"))
-        self.assertLess(power_up.index("xSemaphoreTake(_ioMutex, (TickType_t)10)"), power_up.index("digitalWrite(_sck, LOW);"))
+        self.assertLess(power_up.index("xSemaphoreTake(_ioMutex, portMAX_DELAY)"), power_up.index("digitalWrite(_sck, LOW);"))
         self.assertIn("_resetSampleStateLocked(false);", power_up)
         self.assertLess(power_up.index("_resetSampleStateLocked(false);"), power_up.rindex("xSemaphoreGive(_ioMutex);"))
 
@@ -81,18 +81,31 @@ class ADS1232ProtocolTests(unittest.TestCase):
         update_body = normalized(method_body("update"))
         refresh_body = normalized(method_body("refreshDataSet"))
 
-        self.assertIn("if (digitalRead(_dout) == LOW && _readADCRaw())", task_body)
+        self.assertIn("if (digitalRead(_dout) != LOW || !_readADCRaw())", task_body)
         self.assertIn("if (digitalRead(_dout) == LOW && _readADCRaw())", update_body)
         self.assertLess(update_body.index("_readADCRaw()"), update_body.index("return 1;"))
         self.assertIn("if (digitalRead(_dout) == LOW && _readADCRaw())", refresh_body)
         self.assertLess(refresh_body.index("_readADCRaw()"), refresh_body.index("currentCount++;"))
 
-    def test_refresh_dataset_clears_timeout_after_successful_read(self):
-        refresh_body = normalized(method_body("refreshDataSet"))
+    def test_successful_buffer_update_clears_timeout(self):
+        update_body = normalized(method_body("_updateBuffer"))
 
-        self.assertLess(refresh_body.index("_readADCRaw()"), refresh_body.index("_lastDoutLowMillis = millis();"))
-        self.assertLess(refresh_body.index("_lastDoutLowMillis = millis();"), refresh_body.index("_signalTimeoutFlag = false;"))
-        self.assertLess(refresh_body.index("_signalTimeoutFlag = false;"), refresh_body.index("currentCount++;"))
+        self.assertLess(update_body.index("_lastDoutLowMillis = millis();"), update_body.index("_signalTimeoutFlag = false;"))
+        self.assertLess(update_body.index("_signalTimeoutFlag = false;"), update_body.index("_dataBuffer[_bufferIdx] = newValue;"))
+
+    def test_adc_read_rechecks_ready_after_io_lock(self):
+        body = normalized(method_body("_readADCRaw"))
+
+        self.assertLess(body.index("xSemaphoreTake(_ioMutex, portMAX_DELAY)"), body.index("if (digitalRead(_dout) != LOW)"))
+        self.assertLess(body.index("if (digitalRead(_dout) != LOW)"), body.index("unsigned long now = micros();"))
+
+    def test_adc_clock_transfer_is_not_preemptible(self):
+        header = normalized(HEADER.read_text(encoding="utf-8"))
+        body = normalized(method_body("_readADCRaw"))
+
+        self.assertIn("portMUX_TYPE _clockMux = portMUX_INITIALIZER_UNLOCKED;", header)
+        self.assertLess(body.index("portENTER_CRITICAL(&_clockMux);"), body.index("for (uint8_t i = 0; i < 25; i++)"))
+        self.assertLess(body.index("for (uint8_t i = 0; i < 25; i++)"), body.index("portEXIT_CRITICAL(&_clockMux);"))
 
 
     def test_refresh_dataset_uses_scaled_timeout(self):
@@ -112,7 +125,7 @@ class ADS1232ProtocolTests(unittest.TestCase):
         update_body = normalized(method_body("_updateBuffer"))
 
         self.assertIn("int32_t signedData = (data & 0x800000UL) ? (int32_t)(data | 0xFF000000UL) : (int32_t)data;", read_body)
-        self.assertIn("_updateBuffer((long)signedData, dataOutOfRange);", read_body)
+        self.assertIn("_updateBuffer((long)signedData, dataOutOfRange, now);", read_body)
         self.assertNotIn("data = data ^ 0x800000", read_body)
         self.assertIn("newValue = -newValue;", update_body)
         self.assertNotIn("0xFFFFFF - newValue", update_body)

@@ -88,7 +88,7 @@ class DefaultStartupTests(unittest.TestCase):
         body = normalized(method_body("tareFresh"))
 
         self.assertIn("unsigned long timeoutMs = _refreshTimeoutForCount(getSamplesInUse());", body)
-        self.assertIn("if (!_taskRunning) { update(); }", body)
+        self.assertIn("if (!_taskRunning.load()) { update(); }", body)
         self.assertIn("_signalTimeoutFlag = true;", body)
 
     def test_tare_timeout_marks_signal_timeout(self):
@@ -108,21 +108,17 @@ class DefaultStartupTests(unittest.TestCase):
         )
         self.assertIn("BaseType_t taskStatus = xTaskCreate(", body)
         self.assertNotIn("xTaskCreatePinnedToCore", body)
-        self.assertLess(body.index("_taskRunning = true;"), body.index("BaseType_t taskStatus = xTaskCreate("))
+        self.assertLess(body.index("_taskRunning.store(true);"), body.index("BaseType_t taskStatus = xTaskCreate("))
         self.assertNotIn("instance->_taskRunning = true;", body)
         self.assertIn("if (taskStatus != pdPASS)", body)
-        self.assertIn("_taskRunning = false;", body)
+        self.assertIn("_taskRunning.store(false);", body)
         self.assertIn("vSemaphoreDelete(_taskStopped);", body)
 
     def test_polling_update_maintains_signal_timeout(self):
         body = method_body("update")
 
-        self.assertIn("_lastDoutLowMillis = millis();", body)
-        self.assertIn("_signalTimeoutFlag = false;", body)
-        self.assertRegex(
-            body,
-            r"if \(millis\(\) - _lastDoutLowMillis > _signalTimeoutMs\) \{[^}]*_signalTimeoutFlag = true;",
-        )
+        self.assertIn("_checkSignalTimeout();", body)
+        self.assertIn("if (digitalRead(_dout) == LOW && _readADCRaw()) return 1;", normalized(body))
 
 
 if __name__ == "__main__":

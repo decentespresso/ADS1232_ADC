@@ -10,6 +10,7 @@
 #ifndef ADS1232_ADC_h
 #define ADS1232_ADC_h
 
+#include <atomic>
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -48,6 +49,11 @@ public:
     // Constructor: Defines pins and configuration at runtime
     ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn, uint8_t a0 = 255,
                 int samples = 64, bool ignHigh = true, bool ignLow = true);
+    ~ADS1232_ADC();
+    ADS1232_ADC(const ADS1232_ADC&) = delete;
+    ADS1232_ADC& operator=(const ADS1232_ADC&) = delete;
+    ADS1232_ADC(ADS1232_ADC&&) = delete;
+    ADS1232_ADC& operator=(ADS1232_ADC&&) = delete;
 
     // Lifecycle
     void begin();                                   // Initialize pins and power up
@@ -119,13 +125,14 @@ private:
     SemaphoreHandle_t _mutex = NULL;
     SemaphoreHandle_t _ioMutex = NULL;
     SemaphoreHandle_t _taskStopped = NULL;
-    volatile bool _taskRunning = false;  // Flag to signal task to stop
+    portMUX_TYPE _clockMux = portMUX_INITIALIZER_UNLOCKED;
+    std::atomic<bool> _taskRunning{false};
 
     // Data Storage
     float _calFactor = 1.0;
     float _calFactorRecip = 1.0;
     float _tareOffset = 0;
-    volatile bool _tareComplete = false;            // One-shot flag: true after tare, cleared on read
+    bool _tareComplete = false;                     // One-shot flag: true after tare, cleared on read
     bool _tareFreshPending = false;
     int _tareFreshSamplesNeeded = 0;
     long _dataBuffer[ADS1232_BUFFER_SIZE];
@@ -136,11 +143,11 @@ private:
     // Debug & diagnostics
     DebugCallback _debugCallback = nullptr;
     bool _debugEnabled = false;
-    volatile long _lastRawValue = 0;
-    volatile unsigned long _conversionTimeMicros = 0;  // interval between successive conversions (true sample period)
-    volatile unsigned long _lastConvMicros = 0;        // micros() of previous conversion; 0 = no prior sample
-    volatile unsigned long _lastDoutLowMillis = 0;
-    volatile bool _signalTimeoutFlag = false;
+    long _lastRawValue = 0;
+    unsigned long _conversionTimeMicros = 0;        // interval between successive conversions (true sample period)
+    unsigned long _lastConvMicros = 0;              // micros() of previous conversion; 0 = no prior sample
+    unsigned long _lastDoutLowMillis = 0;
+    bool _signalTimeoutFlag = false;
     bool _lastDataOutOfRange = false;
     uint32_t _signalTimeoutMs = DEFAULT_SIGNAL_TIMEOUT_MS;
     bool _reverseVal = false;
@@ -152,8 +159,9 @@ private:
     void _resetSampleStateLocked(bool resetTareOffset);
     float _filteredAverageLocked();
     void _commitFreshTareIfReadyLocked();
+    void _checkSignalTimeout();
     unsigned long _refreshTimeoutForCount(int targetCount);
-    void _updateBuffer(long newValue, bool dataOutOfRange);              // Updates the running sum and buffer
+    bool _updateBuffer(long newValue, bool dataOutOfRange, unsigned long conversionMicros);
     ADS1232DebugInfo _captureDebugInfoLocked();     // Snapshot under mutex
 };
 

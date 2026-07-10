@@ -34,6 +34,27 @@ def method_body(name):
 
 
 class LifecycleThreadSafetyTests(unittest.TestCase):
+    def test_instances_own_and_release_their_freertos_handles(self):
+        header = normalized(HEADER.read_text(encoding="utf-8"))
+        source = normalized(SOURCE.read_text(encoding="utf-8"))
+
+        self.assertIn("~ADS1232_ADC();", header)
+        self.assertIn("ADS1232_ADC(const ADS1232_ADC&) = delete;", header)
+        self.assertIn("ADS1232_ADC& operator=(const ADS1232_ADC&) = delete;", header)
+        self.assertIn("ADS1232_ADC(ADS1232_ADC&&) = delete;", header)
+        self.assertIn("ADS1232_ADC& operator=(ADS1232_ADC&&) = delete;", header)
+        self.assertIn("ADS1232_ADC::~ADS1232_ADC() { end(); }", source)
+
+    def test_task_running_flag_is_atomic(self):
+        header = normalized(HEADER.read_text(encoding="utf-8"))
+        source = normalized(SOURCE.read_text(encoding="utf-8"))
+
+        self.assertIn("#include <atomic>", header)
+        self.assertIn("std::atomic<bool> _taskRunning{false};", header)
+        self.assertNotIn("volatile bool _taskRunning", header)
+        self.assertIn("_taskRunning.load()", source)
+        self.assertIn("_taskRunning.store(false)", source)
+
     def test_begin_paths_recreate_mutexes_after_end(self):
         header = HEADER.read_text(encoding="utf-8")
         body = normalized(method_body("_ensureMutex"))
@@ -79,7 +100,7 @@ class LifecycleThreadSafetyTests(unittest.TestCase):
             body = method_body(name)
 
             self.assertIn(
-                "xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE",
+                "xSemaphoreTake(_mutex, portMAX_DELAY)",
                 body,
                 name,
             )
