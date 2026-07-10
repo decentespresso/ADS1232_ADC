@@ -150,6 +150,7 @@ private:
     void _samplingTask(void* pvParameters);         // The FreeRTOS task function
     bool _readADCRaw();                             // The bit-banging ADC reader
     void _resetSampleStateLocked(bool resetTareOffset);
+    float _filteredAverageLocked();
     void _commitFreshTareIfReadyLocked();
     unsigned long _refreshTimeoutForCount(int targetCount);
     void _updateBuffer(long newValue, bool dataOutOfRange);              // Updates the running sum and buffer

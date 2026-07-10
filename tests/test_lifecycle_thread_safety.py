@@ -123,8 +123,17 @@ class LifecycleThreadSafetyTests(unittest.TestCase):
 
         self.assertIn("void tareFresh();", header)
         self.assertIn("void tareFreshNoDelay();", header)
-        self.assertIn("if (count > 0) { _tareOffset = (float)sum / count; _tareComplete = true; }", tare_body)
+        self.assertIn("if (_validSamples > 0) { _tareOffset = _filteredAverageLocked(); _tareComplete = true; }", tare_body)
         self.assertNotIn("_resetSampleStateLocked(false);", tare_body)
+
+    def test_weight_tare_and_debug_share_filtered_average(self):
+        header = normalized(HEADER.read_text(encoding="utf-8"))
+
+        self.assertIn("float _filteredAverageLocked();", header)
+        self.assertIn("result = _filteredAverageLocked() - _tareOffset;", normalized(method_body("getData")))
+        self.assertIn("_tareOffset = _filteredAverageLocked();", normalized(method_body("tareNoDelay")))
+        self.assertIn("_tareOffset = _filteredAverageLocked();", normalized(method_body("_commitFreshTareIfReadyLocked")))
+        self.assertIn("info.smoothedValue = (long)_filteredAverageLocked();", normalized(method_body("_captureDebugInfoLocked")))
 
 
 if __name__ == "__main__":

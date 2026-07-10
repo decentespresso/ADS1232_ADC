@@ -61,22 +61,38 @@ void ADS1232_ADC::_resetSampleStateLocked(bool resetTareOffset) {
     }
 }
 
+float ADS1232_ADC::_filteredAverageLocked() {
+    int64_t sum = 0;
+    long high = LONG_MIN;
+    long low = LONG_MAX;
+
+    for (int i = 0; i < _validSamples; i++) {
+        long value = _dataBuffer[i];
+        sum += value;
+        if (value > high) high = value;
+        if (value < low) low = value;
+    }
+
+    int count = _validSamples;
+    if (_ignHigh && _validSamples > 2) {
+        sum -= high;
+        count--;
+    }
+    if (_ignLow && _validSamples > 2) {
+        sum -= low;
+        count--;
+    }
+
+    return count > 0 ? (float)sum / count : 0.0f;
+}
 
 void ADS1232_ADC::_commitFreshTareIfReadyLocked() {
     if (!_tareFreshPending || _validSamples < _tareFreshSamplesNeeded) return;
 
-    int64_t sum = 0;
-    int count = _validSamples;
-    for (int i = 0; i < count; i++) {
-        sum += _dataBuffer[i];
-    }
-
-    if (count > 0) {
-        _tareOffset = (float)sum / count;
-        _tareFreshPending = false;
-        _tareFreshSamplesNeeded = 0;
-        _tareComplete = true;
-    }
+    _tareOffset = _filteredAverageLocked();
+    _tareFreshPending = false;
+    _tareFreshSamplesNeeded = 0;
+    _tareComplete = true;
 }
 
 unsigned long ADS1232_ADC::_refreshTimeoutForCount(int targetCount) {
@@ -344,32 +360,10 @@ float ADS1232_ADC::getData() {
     if (_mutex == NULL) return 0.0f;
 
     float result = 0.0f;
-    int64_t sum = 0;
-    long high = LONG_MIN;
-    long low = LONG_MAX;
-    int count = 0;
 
     if (xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
-        int samplesToRead = _validSamples;
-
-        for (int i = 0; i < samplesToRead; i++) {
-            long val = _dataBuffer[i];
-            sum += val;
-            if (val > high) high = val;
-            if (val < low) low = val;
-            count++;
-        }
-
-        // Outlier rejection (only if enough samples to make it meaningful)
-        if (_ignHigh && count > 2) sum -= high;
-        if (_ignLow && count > 2) sum -= low;
-
-        int effectiveCount = count;
-        if (_ignHigh && count > 2) effectiveCount--;
-        if (_ignLow && count > 2) effectiveCount--;
-
-        if (effectiveCount > 0) {
-            result = ((float)sum / effectiveCount) - _tareOffset;
+        if (_validSamples > 0) {
+            result = _filteredAverageLocked() - _tareOffset;
             result *= _calFactorRecip;
         }
 
@@ -404,15 +398,8 @@ void ADS1232_ADC::tareNoDelay() {
     if (_mutex == NULL) return;
 
     if (xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
-        int64_t sum = 0;
-        int count = _validSamples;
-
-        for (int i = 0; i < count; i++) {
-            sum += _dataBuffer[i];
-        }
-
-        if (count > 0) {
-            _tareOffset = (float)sum / count;
+        if (_validSamples > 0) {
+            _tareOffset = _filteredAverageLocked();
             _tareComplete = true;
         }
 
@@ -717,31 +704,8 @@ ADS1232DebugInfo ADS1232_ADC::_captureDebugInfoLocked() {
     info.validSamples = _validSamples;
     info.signalTimeout = _signalTimeoutFlag;
 
-    // Smoothed value and data-out-of-range (same logic as getData)
     if (_validSamples > 0) {
-        int64_t sum = 0;
-        long high = LONG_MIN;
-        long low = LONG_MAX;
-        int count = 0;
-
-        for (int i = 0; i < _validSamples; i++) {
-            long val = _dataBuffer[i];
-            sum += val;
-            if (val > high) high = val;
-            if (val < low) low = val;
-            count++;
-        }
-
-        if (_ignHigh && count > 2) sum -= high;
-        if (_ignLow && count > 2) sum -= low;
-
-        int effectiveCount = count;
-        if (_ignHigh && count > 2) effectiveCount--;
-        if (_ignLow && count > 2) effectiveCount--;
-
-        if (effectiveCount > 0) {
-            info.smoothedValue = sum / effectiveCount;
-        }
+        info.smoothedValue = (long)_filteredAverageLocked();
     }
 
     info.dataOutOfRange = _lastDataOutOfRange;
