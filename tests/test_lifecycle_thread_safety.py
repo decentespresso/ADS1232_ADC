@@ -89,10 +89,10 @@ class LifecycleThreadSafetyTests(unittest.TestCase):
         body = normalized(method_body("getNewCalibration"))
 
         self.assertIn("float calFactor = getCalFactor();", body)
-        self.assertIn("if (known_mass <= 0.0f || !isfinite(known_mass)) return calFactor;", body)
+        self.assertIn("if (known_mass <= 0.0f || !std::isfinite(known_mass)) return calFactor;", body)
         self.assertIn("if (fabsf(currentValue) < ADS1232_MIN_CALIBRATION_VALUE) return calFactor;", body)
         self.assertIn("float newCalFactor = (currentValue * calFactor) / known_mass;", body)
-        self.assertIn("if (!isfinite(newCalFactor) || fabsf(newCalFactor) < ADS1232_MIN_CALIBRATION_VALUE) return calFactor;", body)
+        self.assertIn("if (!std::isfinite(newCalFactor) || fabsf(newCalFactor) < ADS1232_MIN_CALIBRATION_VALUE) return calFactor;", body)
         self.assertNotIn("newCalFactor <= 0.0f", body)
         self.assertNotIn("_calFactor", body)
 

@@ -387,9 +387,9 @@ void ADS1232_ADC::tare() {
 
     // Wait for tare to complete (non-blocking wait)
     // tareNoDelay is instant — captures current buffer average.
-    uint32_t timeout = millis() + 2000; // 2 second timeout guard
+    uint32_t startedAt = millis();
     while (!getTareStatus()) {
-        if (millis() > timeout) {
+        if (millis() - startedAt > 2000) {
             _signalTimeoutFlag = true;
             break;
         }
@@ -484,7 +484,7 @@ void ADS1232_ADC::setGain(uint8_t gain) {
 // setCalFactor() & getCalFactor()
 // ---------------------------------------------------------------------------
 void ADS1232_ADC::setCalFactor(float cal) {
-    if (!isfinite(cal) || fabsf(cal) < ADS1232_MIN_CALIBRATION_VALUE) {
+    if (!std::isfinite(cal) || fabsf(cal) < ADS1232_MIN_CALIBRATION_VALUE) {
         return;
     }
 
@@ -651,11 +651,11 @@ bool ADS1232_ADC::refreshDataSet() {
 float ADS1232_ADC::getNewCalibration(float known_mass) {
     float currentValue = getData();
     float calFactor = getCalFactor();
-    if (known_mass <= 0.0f || !isfinite(known_mass)) return calFactor;
+    if (known_mass <= 0.0f || !std::isfinite(known_mass)) return calFactor;
     if (fabsf(currentValue) < ADS1232_MIN_CALIBRATION_VALUE) return calFactor;
 
     float newCalFactor = (currentValue * calFactor) / known_mass;
-    if (!isfinite(newCalFactor) || fabsf(newCalFactor) < ADS1232_MIN_CALIBRATION_VALUE) return calFactor;
+    if (!std::isfinite(newCalFactor) || fabsf(newCalFactor) < ADS1232_MIN_CALIBRATION_VALUE) return calFactor;
     setCalFactor(newCalFactor);
     return newCalFactor;
 }

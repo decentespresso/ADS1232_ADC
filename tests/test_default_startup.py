@@ -95,9 +95,12 @@ class DefaultStartupTests(unittest.TestCase):
         self.assertIn("_signalTimeoutFlag = true;", body)
 
     def test_tare_timeout_marks_signal_timeout(self):
-        body = method_body("tare")
+        body = normalized(method_body("tare"))
 
         self.assertIn("_signalTimeoutFlag = true;", body)
+        self.assertIn("uint32_t startedAt = millis();", body)
+        self.assertIn("millis() - startedAt > 2000", body)
+        self.assertNotIn("millis() + 2000", body)
 
     def test_begin_task_clamps_interval_and_handles_creation_failure(self):
         body = normalized(method_body("beginTask"))
