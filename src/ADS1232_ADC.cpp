@@ -626,7 +626,7 @@ bool ADS1232_ADC::refreshDataSet() {
 
     int targetCount = 0;
     if (_mutex != NULL && xSemaphoreTake(_mutex, (TickType_t)10) == pdTRUE) {
-        targetCount = _samplesInUse + (_ignHigh ? 1 : 0) + (_ignLow ? 1 : 0);
+        targetCount = _samplesInUse;
         xSemaphoreGive(_mutex);
     } else {
         return false;

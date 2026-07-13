@@ -99,6 +99,9 @@ class ADS1232ProtocolTests(unittest.TestCase):
         refresh_body = normalized(method_body("refreshDataSet"))
         helper_body = normalized(method_body("_refreshTimeoutForCount"))
 
+        self.assertIn("targetCount = _samplesInUse;", refresh_body)
+        self.assertNotIn("_ignHigh", refresh_body)
+        self.assertNotIn("_ignLow", refresh_body)
         self.assertIn("unsigned long timeoutMs = _refreshTimeoutForCount(targetCount);", refresh_body)
         self.assertIn("millis() - startedAt > timeoutMs", refresh_body)
         self.assertIn("ADS1232_DEFAULT_CONVERSION_MS", helper_body)
