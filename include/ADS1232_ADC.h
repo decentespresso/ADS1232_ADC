@@ -26,6 +26,8 @@
 // Debug info structure — lightweight snapshot, no statistics precomputed.
 struct ADS1232DebugInfo {
     unsigned long timestamp;        // millis() when debug info was captured
+    uint32_t conversionSequence;
+    unsigned long lastConversionTimestamp;
     long rawValue;                  // Latest signed 24-bit value read (after reverse)
     long smoothedValue;             // Smoothed value after filtering
     long tareOffset;                // Current tare offset
@@ -137,6 +139,8 @@ private:
     DebugCallback _debugCallback = nullptr;
     bool _debugEnabled = false;
     volatile long _lastRawValue = 0;
+    uint32_t _conversionSequence = 0;
+    unsigned long _lastConversionTimestamp = 0;
     volatile unsigned long _conversionTimeMicros = 0;  // interval between successive conversions (true sample period)
     volatile unsigned long _lastConvMicros = 0;        // micros() of previous conversion; 0 = no prior sample
     volatile unsigned long _lastDoutLowMillis = 0;
