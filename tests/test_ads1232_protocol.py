@@ -130,6 +130,20 @@ class ADS1232ProtocolTests(unittest.TestCase):
         self.assertIn("info.dataOutOfRange = _lastDataOutOfRange;", debug_body)
         self.assertNotIn("_lastRawValue > 0xFFFFFF", debug_body)
 
+    def test_debug_snapshot_reports_conversion_freshness(self):
+        header = normalized(HEADER.read_text(encoding="utf-8"))
+        update_body = normalized(method_body("_updateBuffer"))
+        debug_body = normalized(method_body("_captureDebugInfoLocked"))
+
+        self.assertIn("uint32_t conversionSequence;", header)
+        self.assertIn("unsigned long lastConversionTimestamp;", header)
+        self.assertIn("int validSamples;", header)
+        self.assertIn("_conversionSequence++;", update_body)
+        self.assertIn("_lastConversionTimestamp = millis();", update_body)
+        self.assertIn("info.conversionSequence = _conversionSequence;", debug_body)
+        self.assertIn("info.lastConversionTimestamp = _lastConversionTimestamp;", debug_body)
+        self.assertIn("info.validSamples = _validSamples;", debug_body)
+
     def test_unused_channel_pin_returns_minus_one(self):
         body = normalized(method_body("getChannelInUse"))
 

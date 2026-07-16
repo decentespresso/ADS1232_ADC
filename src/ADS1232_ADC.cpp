@@ -318,6 +318,8 @@ void ADS1232_ADC::_updateBuffer(long newValue, bool dataOutOfRange) {
             _bufferIdx = (_bufferIdx + 1) % _samplesInUse;
             if (_validSamples < _samplesInUse) _validSamples++;
             _lastRawValue = newValue;
+            _conversionSequence++;
+            _lastConversionTimestamp = millis();
             _lastDataOutOfRange = dataOutOfRange;
             _commitFreshTareIfReadyLocked();
 
@@ -708,6 +710,8 @@ ADS1232DebugInfo ADS1232_ADC::_captureDebugInfoLocked() {
     ADS1232DebugInfo info = {};
 
     info.timestamp = millis();
+    info.conversionSequence = _conversionSequence;
+    info.lastConversionTimestamp = _lastConversionTimestamp;
     info.rawValue = _lastRawValue;
     info.tareOffset = (long)_tareOffset;
     info.conversionTimeMs = _conversionTimeMicros / 1000.0f;
