@@ -198,17 +198,17 @@ ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn,
 
 | Method | Description |
 |--------|-------------|
-| `setDebugCallback(cb)` | Fire callback on each ADC conversion from the FreeRTOS task |
+| `setDebugCallback(cb)` | Run callback synchronously after each successful read |
 | `getDebugInfo()` | Snapshot of current internal state |
 | `setSignalTimeoutMs(uint32_t)` | Override DOUT timeout (default 300ms) |
 | `getSignalTimeoutFlag()` | True if DOUT inactive longer than timeout |
-| `getConversionTime()` | Latest bit-bang conversion time in ms |
-| `getSPS()` | Samples per second from latest conversion |
+| `getConversionTime()` | Latest interval between successful samples in ms |
+| `getSPS()` | Sample rate calculated from the latest sample interval |
 | `getSettlingTime()` | Estimated settling time = conversionTime × samplesInUse |
 | `getTareOffset()` | Get raw tare offset (for calibration tools) |
 | `setTareOffset(long)` | Set raw tare offset directly |
 
-**Debug callback notes:** Fires from the FreeRTOS sampling task, once per conversion. Must complete in < 1ms, no blocking ops, no mutex acquisition. Receives a snapshot copy — calling `getData()` from the callback is safe. See `ADS1232DebugInfo` struct in the header for available fields.
+**Debug callback notes:** The callback runs synchronously after each successful read. With `update()` or `refreshDataSet()`, it runs in the calling task; with background sampling, it runs in the FreeRTOS sampling task. The snapshot is captured before invocation and all library locks are released before the callback runs, so calling `getData()` is safe. Keep the callback short because it delays the caller or the next background sample. See `ADS1232DebugInfo` in the header for available fields.
 
 ## License
 

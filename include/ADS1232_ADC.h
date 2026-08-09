@@ -31,8 +31,8 @@ struct ADS1232DebugInfo {
     long rawValue;                  // Latest signed 24-bit value read (after reverse)
     long smoothedValue;             // Smoothed value after filtering
     long tareOffset;                // Current tare offset
-    float conversionTimeMs;         // Latest conversion time in ms
-    float sps;                      // Samples per second
+    float conversionTimeMs;         // Latest interval between successful samples
+    float sps;                      // Sample rate from the latest sample interval
     int readIndex;                  // Current buffer index
     int samplesInUse;               // Number of samples being averaged
     int validSamples;               // Number of real ADC readings in buffer
@@ -40,9 +40,9 @@ struct ADS1232DebugInfo {
     bool signalTimeout;             // If DOUT signal timed out
 };
 
-// Debug callback — fires from FreeRTOS sampling task, once per conversion.
-// Must be fast (< 1ms), non-blocking, no mutex acquisition.
-// Gets a snapshot copy; calling getData() from the callback is safe.
+// Runs synchronously after each successful read in the reading context.
+// The snapshot is captured before invocation and library locks are released.
+// Keep callbacks short; calling getData() is safe.
 typedef void (*DebugCallback)(const ADS1232DebugInfo& info);
 
 class ADS1232_ADC {
@@ -85,7 +85,7 @@ public:
     uint8_t getDoutPin();                           // Returns DOUT pin number
 
     // Debug & diagnostics
-    void setDebugCallback(DebugCallback callback);  // Fire callback on each conversion
+    void setDebugCallback(DebugCallback callback);  // Run callback after each successful read
     void setDebugEnabled(bool enabled);             // Enable/disable debug callbacks
     bool getDebugEnabled();                         // Check if debug is enabled
     ADS1232DebugInfo getDebugInfo();                // Snapshot of current state
@@ -93,8 +93,8 @@ public:
     bool getSignalTimeoutFlag();                    // True if DOUT inactive > timeout
 
     // Conversion timing diagnostics
-    float getConversionTime();                      // Latest conversion time in ms
-    float getSPS();                                 // Samples per second from latest conversion
+    float getConversionTime();                      // Latest sample interval in ms
+    float getSPS();                                 // Sample rate from latest sample interval
     float getSettlingTime();                        // Estimated settling time = conversionTime * samplesInUse
 
     // Raw offset access (for calibration tools)

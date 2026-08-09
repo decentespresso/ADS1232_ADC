@@ -5,6 +5,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PLATFORMIO = ROOT / "examples" / "verify_pulse_count" / "platformio.ini"
 README = ROOT / "README.md"
+HEADER = ROOT / "include" / "ADS1232_ADC.h"
 EXAMPLE = ROOT / "examples" / "verify_pulse_count" / "src" / "main.cpp"
 
 
@@ -29,6 +30,17 @@ class ExampleConfigTests(unittest.TestCase):
         self.assertNotIn("GainTest", example)
         self.assertNotIn("scale.setGain", example)
         self.assertNotIn("gain 64", example.lower())
+
+    def test_docs_describe_diagnostics_execution_context(self):
+        readme = README.read_text(encoding="utf-8")
+        header = HEADER.read_text(encoding="utf-8")
+
+        self.assertIn("runs synchronously after each successful read", readme)
+        self.assertIn("Latest interval between successful samples in ms", readme)
+        self.assertNotIn("Latest bit-bang conversion time in ms", readme)
+        self.assertIn("Runs synchronously after each successful read in the reading context", header)
+        self.assertIn("Latest interval between successful samples", header)
+        self.assertNotIn("fires from FreeRTOS sampling task", header)
 
 
 if __name__ == "__main__":
