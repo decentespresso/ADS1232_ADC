@@ -23,7 +23,12 @@ class ExampleConfigTests(unittest.TestCase):
         self.assertNotIn("Set gain (affects clock pulse count)", readme)
         self.assertNotIn("25 pulses -> next conversion on channel 1", example)
         self.assertNotIn("26 pulses -> next conversion on channel 2", example)
-        self.assertIn("26th SCLK pulse starts offset calibration", example)
+        self.assertIn("Compatibility overload; gain argument is ignored", readme)
+        self.assertIn("Compatibility no-op; ADS1232 gain is hardware-controlled", readme)
+        self.assertIn("constexpr uint8_t EXPECTED_PULSES = 25;", example)
+        self.assertNotIn("GainTest", example)
+        self.assertNotIn("scale.setGain", example)
+        self.assertNotIn("gain 64", example.lower())
 
 
 if __name__ == "__main__":
