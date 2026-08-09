@@ -47,7 +47,7 @@ class NumericSafetyTests(unittest.TestCase):
         source = SOURCE.read_text(encoding="utf-8")
 
         self.assertNotIn("long sum = 0;", source)
-        self.assertEqual(4, source.count("int64_t sum = 0;"))
+        self.assertEqual(1, source.count("int64_t sum = 0;"))
 
     def test_unsafe_calibration_factors_are_rejected_without_rejecting_sign(self):
         set_cal_body = normalized(method_body("setCalFactor"))

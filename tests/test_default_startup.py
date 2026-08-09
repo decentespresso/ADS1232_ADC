@@ -4,6 +4,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+HEADER = ROOT / "include" / "ADS1232_ADC.h"
 SOURCE = ROOT / "src" / "ADS1232_ADC.cpp"
 
 
@@ -65,13 +66,10 @@ class DefaultStartupTests(unittest.TestCase):
         )
 
     def test_tare_no_delay_only_completes_with_samples(self):
-        body = method_body("tareNoDelay")
+        body = normalized(method_body("tareNoDelay"))
 
         self.assertEqual(1, body.count("_tareComplete = true;"))
-        self.assertRegex(
-            body,
-            r"if \(count > 0\) \{[^}]*_tareOffset = \(float\)sum / count;[^}]*_tareComplete = true;",
-        )
+        self.assertIn("if (_validSamples > 0) { _tareOffset = _filteredAverageLocked(); _tareComplete = true; }", body)
 
 
     def test_tare_fresh_no_delay_collects_fresh_samples_before_completion(self):
@@ -84,8 +82,20 @@ class DefaultStartupTests(unittest.TestCase):
         self.assertIn("_tareFreshSamplesNeeded = _samplesInUse > 0 ? _samplesInUse : 1;", body)
         self.assertNotIn("_tareComplete = true;", body)
         self.assertIn("_commitFreshTareIfReadyLocked();", update_body)
-        self.assertIn("_tareOffset = (float)sum / count;", commit_body)
+        self.assertIn("_tareOffset = _filteredAverageLocked();", commit_body)
         self.assertIn("_tareComplete = true;", commit_body)
+
+    def test_weight_tare_and_debug_share_filtered_average(self):
+        header = normalized(HEADER.read_text(encoding="utf-8"))
+        helper_body = normalized(method_body("_filteredAverageLocked"))
+
+        self.assertIn("float _filteredAverageLocked();", header)
+        self.assertIn("if (_ignHigh && _validSamples > 2)", helper_body)
+        self.assertIn("if (_ignLow && _validSamples > 2)", helper_body)
+        self.assertIn("result = _filteredAverageLocked() - _tareOffset;", normalized(method_body("getData")))
+        self.assertIn("_tareOffset = _filteredAverageLocked();", normalized(method_body("tareNoDelay")))
+        self.assertIn("_tareOffset = _filteredAverageLocked();", normalized(method_body("_commitFreshTareIfReadyLocked")))
+        self.assertIn("info.smoothedValue = (long)_filteredAverageLocked();", normalized(method_body("_captureDebugInfoLocked")))
 
     def test_tare_fresh_timeout_marks_signal_timeout(self):
         body = normalized(method_body("tareFresh"))

@@ -123,7 +123,7 @@ class LifecycleThreadSafetyTests(unittest.TestCase):
 
         self.assertIn("void tareFresh();", header)
         self.assertIn("void tareFreshNoDelay();", header)
-        self.assertIn("if (count > 0) { _tareOffset = (float)sum / count; _tareComplete = true; }", tare_body)
+        self.assertIn("if (_validSamples > 0) { _tareOffset = _filteredAverageLocked(); _tareComplete = true; }", tare_body)
         self.assertNotIn("_resetSampleStateLocked(false);", tare_body)
 
 
