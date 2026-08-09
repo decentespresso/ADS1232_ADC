@@ -38,7 +38,9 @@ class ExampleConfigTests(unittest.TestCase):
         self.assertIn("runs synchronously after each successful read", readme)
         self.assertIn("Latest interval between successful samples in ms", readme)
         self.assertNotIn("Latest bit-bang conversion time in ms", readme)
-        self.assertIn("Runs synchronously after each successful read in the reading context", header)
+        self.assertIn("setDebugEnabled(bool)", readme)
+        self.assertIn("registered and debugging is enabled", readme)
+        self.assertIn("When enabled, runs synchronously after each successful read", header)
         self.assertIn("Latest interval between successful samples", header)
         self.assertNotIn("fires from FreeRTOS sampling task", header)
 

@@ -40,7 +40,7 @@ struct ADS1232DebugInfo {
     bool signalTimeout;             // If DOUT signal timed out
 };
 
-// Runs synchronously after each successful read in the reading context.
+// When enabled, runs synchronously after each successful read in the reading context.
 // The snapshot is captured before invocation and library locks are released.
 // Keep callbacks short; calling getData() is safe.
 typedef void (*DebugCallback)(const ADS1232DebugInfo& info);
@@ -85,9 +85,9 @@ public:
     uint8_t getDoutPin();                           // Returns DOUT pin number
 
     // Debug & diagnostics
-    void setDebugCallback(DebugCallback callback);  // Run callback after each successful read
-    void setDebugEnabled(bool enabled);             // Enable/disable debug callbacks
-    bool getDebugEnabled();                         // Check if debug is enabled
+    void setDebugCallback(DebugCallback callback);  // Register callback for successful reads
+    void setDebugEnabled(bool enabled);             // Enable/disable callback delivery
+    bool getDebugEnabled();                         // Check if callback delivery is enabled
     ADS1232DebugInfo getDebugInfo();                // Snapshot of current state
     void setSignalTimeoutMs(uint32_t ms);           // Override DOUT timeout (default 300ms)
     bool getSignalTimeoutFlag();                    // True if DOUT inactive > timeout
