@@ -41,8 +41,8 @@ struct ADS1232DebugInfo {
 };
 
 // When enabled, runs synchronously after each successful read in the reading context.
-// The snapshot is captured before invocation and library locks are released.
-// Keep callbacks short; calling getData() is safe.
+// The state mutex is released before invocation; ADC I/O remains locked until return.
+// Calling getData() is safe; do not call hardware-control methods. Keep callbacks short.
 typedef void (*DebugCallback)(const ADS1232DebugInfo& info);
 
 class ADS1232_ADC {

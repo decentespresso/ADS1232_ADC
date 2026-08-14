@@ -210,7 +210,7 @@ ADS1232_ADC(uint8_t dout, uint8_t sck, uint8_t pdwn,
 | `getTareOffset()` | Get raw tare offset (for calibration tools) |
 | `setTareOffset(long)` | Set raw tare offset directly |
 
-**Debug callback notes:** After a callback is registered and debugging is enabled, it runs synchronously after each successful read. With `update()` or `refreshDataSet()`, it runs in the calling task; with background sampling, it runs in the FreeRTOS sampling task. The snapshot is captured before invocation and all library locks are released before the callback runs, so calling `getData()` is safe. Keep the callback short because it delays the caller or the next background sample. See `ADS1232DebugInfo` in the header for available fields.
+**Debug callback notes:** After a callback is registered and debugging is enabled, it runs synchronously after each successful read. With `update()` or `refreshDataSet()`, it runs in the calling task; with background sampling, it runs in the FreeRTOS sampling task. The state mutex is released before invocation, so calling `getData()` is safe, but the ADC I/O transaction remains locked until the callback returns. Do not call `powerDown()`, `powerUp()`, or `setChannelInUse()` from the callback. Keep the callback short because it delays the caller or the next background sample. See `ADS1232DebugInfo` in the header for available fields.
 
 ## License
 
